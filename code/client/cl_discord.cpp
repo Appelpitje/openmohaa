@@ -32,7 +32,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 // Discord Application ID - Replace with your own from Discord Developer Portal
 // Create an application at: https://discord.com/developers/applications
-#define DISCORD_APP_ID "518003254605643796"
+#define DISCORD_APP_ID "1449151797166870722"
 
 // Update interval in milliseconds (don't spam Discord API)
 #define DISCORD_UPDATE_INTERVAL 5000
@@ -128,8 +128,9 @@ static void CL_DiscordUpdatePresence(void)
     DiscordRichPresence presence;
     char stateBuffer[128];
     char detailsBuffer[128];
-    const char *mapName;
     const char *serverInfo;
+    const char *mapMessage;
+    const char *serverName = NULL;
     int numClients = 0;
     int maxClients = 0;
 
@@ -138,9 +139,8 @@ static void CL_DiscordUpdatePresence(void)
     // Set the start timestamp for "elapsed" display
     presence.startTimestamp = discord_startTime;
 
-    // Set large image (game logo)
-    presence.largeImageKey = "openmohaa_logo";
-    presence.largeImageText = "OpenMoHAA";
+    // Note: largeImageKey/smallImageKey require assets uploaded to Discord Developer Portal
+    // Leave them as NULL to show presence without custom images
 
     switch (clc.state) {
         case CA_DISCONNECTED:
@@ -166,56 +166,80 @@ static void CL_DiscordUpdatePresence(void)
             Q_strncpyz(stateBuffer, "Loading...", sizeof(stateBuffer));
             presence.state = stateBuffer;
             
-            // Try to get map name from gamestate
-            mapName = cl.mapname;
-            if (mapName && mapName[0]) {
-                Com_sprintf(detailsBuffer, sizeof(detailsBuffer), "Map: %s", COM_SkipPath((char*)mapName));
+            // Try to get full map name from CS_MESSAGE (worldspawn message)
+            mapMessage = cl.gameState.stringData + cl.gameState.stringOffsets[2]; // CS_MESSAGE = 2
+            if (mapMessage && mapMessage[0]) {
+                Com_sprintf(detailsBuffer, sizeof(detailsBuffer), "Map: %s", mapMessage);
+                presence.details = detailsBuffer;
+            } else if (cl.mapname[0]) {
+                // Fallback to BSP name
+                Com_sprintf(detailsBuffer, sizeof(detailsBuffer), "Map: %s", COM_SkipPath((char*)cl.mapname));
                 presence.details = detailsBuffer;
             }
             break;
 
         case CA_ACTIVE:
-            // Get map name
-            mapName = cl.mapname;
-            if (mapName && mapName[0]) {
-                Com_sprintf(detailsBuffer, sizeof(detailsBuffer), "Playing: %s", COM_SkipPath((char*)mapName));
-                presence.details = detailsBuffer;
-            } else {
-                presence.details = "In Game";
-            }
-
-            // Try to get player count from server info
+            // Get server info for hostname and player count
             serverInfo = cl.gameState.stringData + cl.gameState.stringOffsets[CS_SERVERINFO];
+            
+            // Get server hostname and build details string (top line)
             if (serverInfo && serverInfo[0]) {
-                const char *val;
+                serverName = Info_ValueForKey(serverInfo, "sv_hostname");
                 
-                val = Info_ValueForKey(serverInfo, "clients");
-                if (val && val[0]) {
-                    numClients = atoi(val);
-                }
-                
-                val = Info_ValueForKey(serverInfo, "sv_maxclients");
+                const char *val = Info_ValueForKey(serverInfo, "sv_maxclients");
                 if (val && val[0]) {
                     maxClients = atoi(val);
                 }
+            }
+            
+            // Details = Server name + IP:port
+            if (serverName && serverName[0]) {
+                Com_sprintf(detailsBuffer, sizeof(detailsBuffer), "%s (%s)", 
+                    serverName, NET_AdrToStringwPort(clc.serverAddress));
+            } else if (clc.servername[0]) {
+                Com_sprintf(detailsBuffer, sizeof(detailsBuffer), "Server: %s", clc.servername);
+            } else {
+                Com_sprintf(detailsBuffer, sizeof(detailsBuffer), "Multiplayer");
+            }
+            presence.details = detailsBuffer;
 
-                if (maxClients > 0) {
-                    Com_sprintf(stateBuffer, sizeof(stateBuffer), "Players: %d/%d", numClients, maxClients);
-                    presence.state = stateBuffer;
-                    presence.partySize = numClients;
-                    presence.partyMax = maxClients;
-                } else {
-                    Q_strncpyz(stateBuffer, "In Game", sizeof(stateBuffer));
-                    presence.state = stateBuffer;
-                }
+            // Get full map name from CS_MESSAGE (worldspawn message field)
+            mapMessage = cl.gameState.stringData + cl.gameState.stringOffsets[2]; // CS_MESSAGE = 2
+            if (mapMessage && mapMessage[0]) {
+                Q_strncpyz(stateBuffer, mapMessage, sizeof(stateBuffer));
+            } else if (cl.mapname[0]) {
+                // Fallback to BSP name without path/extension
+                const char *bspName = COM_SkipPath((char*)cl.mapname);
+                Q_strncpyz(stateBuffer, bspName, sizeof(stateBuffer));
+                // Remove .bsp extension if present
+                char *ext = strstr(stateBuffer, ".bsp");
+                if (ext) *ext = '\0';
             } else {
                 Q_strncpyz(stateBuffer, "In Game", sizeof(stateBuffer));
-                presence.state = stateBuffer;
+            }
+            presence.state = stateBuffer;
+
+            // Count players by checking CS_PLAYERS configstrings (slot 1684+)
+            // CS_PLAYERS = 1684, MAX_CLIENTS = 64
+            {
+                int i;
+                numClients = 0;
+                for (i = 0; i < 64; i++) {
+                    const char *playerInfo = cl.gameState.stringData + cl.gameState.stringOffsets[1684 + i];
+                    if (playerInfo && playerInfo[0]) {
+                        numClients++;
+                    }
+                }
             }
 
-            // Set small icon based on game type
-            presence.smallImageKey = "playing";
-            presence.smallImageText = "Playing";
+            // Set party size for player count display
+            if (numClients > 0 && maxClients > 0) {
+                presence.partySize = numClients;
+                presence.partyMax = maxClients;
+            } else if (maxClients > 0) {
+                presence.partySize = 1; // At least the player themselves
+                presence.partyMax = maxClients;
+            }
             break;
 
         case CA_CINEMATIC:
