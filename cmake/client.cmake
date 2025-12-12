@@ -9,12 +9,16 @@ include(shared_script)
 
 include(renderer_common)
 
+# Discord Rich Presence
+option(USE_DISCORD_RPC "Enable Discord Rich Presence" OFF)
+
 set(CLIENT_SOURCES
     ${SOURCE_DIR}/client/cl_avi.cpp
     ${SOURCE_DIR}/client/cl_cgame.cpp
     ${SOURCE_DIR}/client/cl_cin.cpp
     ${SOURCE_DIR}/client/cl_consolecmds.cpp
     ${SOURCE_DIR}/client/cl_curl.c
+    ${SOURCE_DIR}/client/cl_discord.cpp
     ${SOURCE_DIR}/client/cl_input.cpp
     ${SOURCE_DIR}/client/cl_instantAction.cpp
     ${SOURCE_DIR}/client/cl_inv.cpp
@@ -93,6 +97,43 @@ endif()
 if(USE_MUMBLE)
     list(APPEND CLIENT_DEFINITIONS USE_MUMBLE)
     list(APPEND CLIENT_LIBRARY_SOURCES ${SOURCE_DIR}/client/libmumblelink.c)
+endif()
+
+# Discord Rich Presence
+if(USE_DISCORD_RPC)
+    list(APPEND CLIENT_DEFINITIONS USE_DISCORD_RPC)
+    list(APPEND CLIENT_INCLUDE_DIRS ${SOURCE_DIR}/thirdparty/discord-rpc/include)
+    
+    # Discord RPC library path
+    if(WIN32)
+        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+            set(DISCORD_RPC_LIB_DIR "win64-dynamic")
+        else()
+            set(DISCORD_RPC_LIB_DIR "win32-dynamic")
+        endif()
+        set(DISCORD_RPC_LIB "${SOURCE_DIR}/thirdparty/discord-rpc/lib/${DISCORD_RPC_LIB_DIR}/discord-rpc.lib")
+        set(DISCORD_RPC_DLL "${SOURCE_DIR}/thirdparty/discord-rpc/lib/${DISCORD_RPC_LIB_DIR}/discord-rpc.dll")
+        if(EXISTS ${DISCORD_RPC_LIB})
+            list(APPEND CLIENT_LIBRARIES ${DISCORD_RPC_LIB})
+            list(APPEND CLIENT_DEPLOY_LIBRARIES ${DISCORD_RPC_DLL})
+        else()
+            message(WARNING "Discord RPC library not found at ${DISCORD_RPC_LIB}. Download from https://github.com/discord/discord-rpc/releases")
+        endif()
+    elseif(APPLE)
+        set(DISCORD_RPC_LIB "${SOURCE_DIR}/thirdparty/discord-rpc/lib/osx-dynamic/libdiscord-rpc.dylib")
+        if(EXISTS ${DISCORD_RPC_LIB})
+            list(APPEND CLIENT_LIBRARIES ${DISCORD_RPC_LIB})
+        else()
+            message(WARNING "Discord RPC library not found at ${DISCORD_RPC_LIB}. Download from https://github.com/discord/discord-rpc/releases")
+        endif()
+    else()
+        set(DISCORD_RPC_LIB "${SOURCE_DIR}/thirdparty/discord-rpc/lib/linux-dynamic/libdiscord-rpc.so")
+        if(EXISTS ${DISCORD_RPC_LIB})
+            list(APPEND CLIENT_LIBRARIES ${DISCORD_RPC_LIB})
+        else()
+            message(WARNING "Discord RPC library not found at ${DISCORD_RPC_LIB}. Download from https://github.com/discord/discord-rpc/releases")
+        endif()
+    endif()
 endif()
 
 list(APPEND CLIENT_BINARY_SOURCES
