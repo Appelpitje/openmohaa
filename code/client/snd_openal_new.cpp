@@ -599,9 +599,17 @@ qboolean S_OPENAL_Init()
 
     if (!QAL_Init(s_openaldriver->string)) {
         Com_Printf("Failed to load library: \"%s\".\n", s_openaldriver->string);
+#if defined(__APPLE__)
+        if (!QAL_Init("/System/Library/Frameworks/OpenAL.framework/OpenAL") &&
+            !QAL_Init("OpenAL.framework/OpenAL") &&
+            !QAL_Init("libopenal.dylib")) {
+            return qfalse;
+        }
+#else
         if (!Q_stricmp(s_openaldriver->string, ALDRIVER_DEFAULT) || !QAL_Init(ALDRIVER_DEFAULT)) {
             return qfalse;
         }
+#endif
     }
 
     if (!Cvar_Get("s_initsound", "1", 0)->integer) {
@@ -982,6 +990,10 @@ static void S_OPENAL_PlayMP3()
 {
     const char *path;
 
+    if (!s_bSoundStarted || !al_initialized) {
+        return;
+    }
+
     if (Cmd_Argc() != 2) {
         Com_Printf("playmp3 <mp3 file>\n");
         return;
@@ -1004,6 +1016,9 @@ S_OPENAL_StopMP3
 */
 static void S_OPENAL_StopMP3()
 {
+    if (!s_bSoundStarted || !al_initialized) {
+        return;
+    }
     S_OPENAL_NukeChannel(&openal.chan_mp3);
 }
 
@@ -1015,6 +1030,10 @@ MUSIC_Pause
 void MUSIC_Pause()
 {
     int i;
+
+    if (!s_bSoundStarted || !al_initialized) {
+        return;
+    }
 
     for (i = 0; i < MAX_SOUNDSYSTEM_SONGS; i++) {
         openal.chan_song[i].pause();
@@ -1029,6 +1048,10 @@ MUSIC_Unpause
 void MUSIC_Unpause()
 {
     int i;
+
+    if (!s_bSoundStarted || !al_initialized) {
+        return;
+    }
 
     for (i = 0; i < MAX_SOUNDSYSTEM_SONGS; i++) {
         if (openal.chan_song[i].is_paused()) {
@@ -4294,6 +4317,9 @@ S_TriggeredMusic_PlayIntroMusic
 */
 void S_TriggeredMusic_PlayIntroMusic()
 {
+    if (!s_bSoundStarted || !al_initialized) {
+        return;
+    }
     S_TriggeredMusic_SetupHandle("sound/music/mus_MainTheme.mp3", 0, 0, true);
 }
 
@@ -4304,6 +4330,9 @@ S_StopMovieAudio
 */
 void S_StopMovieAudio()
 {
+    if (!s_bSoundStarted || !al_initialized) {
+        return;
+    }
     openal.chan_movie.stop();
 }
 
@@ -4315,6 +4344,10 @@ S_SetupMovieAudio
 void S_SetupMovieAudio(const char *pszMovieName)
 {
     char filename[MAX_QPATH];
+
+    if (!s_bSoundStarted || !al_initialized) {
+        return;
+    }
 
     S_StopMovieAudio();
 
@@ -4344,6 +4377,9 @@ S_CurrentMoviePosition
 */
 int S_CurrentMoviePosition()
 {
+    if (!s_bSoundStarted || !al_initialized) {
+        return 0;
+    }
     return openal.chan_movie.sample_ms_offset();
 }
 

@@ -29,6 +29,7 @@ option(USE_CODEC_MAD "MP3 support" ON)
 option(USE_VOIP "Voice chat" OFF)
 option(USE_MUMBLE "Mumble support" OFF)
 option(USE_FREETYPE "Freetype font rendering" OFF)
+option(USE_DISCORD_RPC "Discord Rich Presence" ON)
 
 option(USE_INTERNAL_LIBS "Use internally packaged libraries" ON)
 option(USE_INTERNAL_SDL "Use internal SDL binary (if available)" ${USE_INTERNAL_LIBS})

@@ -15,7 +15,12 @@
 ## ✨ Fork Features & Additions
 
 This fork includes extra features and enhancements built on top of OpenMoHAA:
-- 🎮 **Discord Rich Presence**: Integrated Discord RPC displaying live mission/server status, map, gametype, and player counts on your Discord profile.
+- 🎮 **Discord Rich Presence**: Integrated Discord RPC displaying live mission/server status, map, gametype, and player counts on your Discord profile (enable with `set cl_discordRichPresence 1`).
+
+<p align="center">
+  <img src="misc/discord-rpc-preview.png" alt="Discord Rich Presence Preview" width="400">
+</p>
+
 - 💬 **Multiplayer Chat Control**: Easily disable or toggle multiplayer chat and quick voice messages via `cg_chat` or console commands (`chat`, `togglechat`, `enablechat`, `disablechat`).
 - 🎯 **High-DPI / Window Resolution Mouse Scaling**: Fixed cursor and crosshair coordinate alignment when running on Retina / High-DPI screens or custom resolutions.
 - 🛠️ **macOS Build Compatibility**: Out-of-the-box support for compiling on modern macOS with bundled OpenAL headers and Apple Silicon host defaults.
