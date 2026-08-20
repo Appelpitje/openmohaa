@@ -10,7 +10,7 @@ set(INTERNAL_OPENAL_DIR ${SOURCE_DIR}/thirdparty/openal-soft-1.24.3)
 
 find_package(OpenAL QUIET)
 
-if(NOT OpenAL_FOUND)
+if(NOT OpenAL_FOUND OR APPLE)
     set(OPENAL_DEFINITIONS USE_INTERNAL_OPENAL_HEADERS)
     set(OPENAL_INCLUDE_DIR ${INTERNAL_OPENAL_DIR}/include)
     set(OPENAL_LIBRARY openal)
