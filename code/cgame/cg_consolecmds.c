@@ -539,6 +539,10 @@ static consoleCommand_t commands[] = {
     {"pushcallvotesubclient",  &CG_PushCallVoteSubClient_f },
     {"pushvote",               &CG_PushVote_f              },
     {"callentryvote",          &CG_CallEntryVote_f         },
+    {"chat",                   &CG_Chat_f                  },
+    {"togglechat",             &CG_ToggleChat_f            },
+    {"enablechat",             &CG_EnableChat_f            },
+    {"disablechat",            &CG_DisableChat_f           },
 };
 
 /*

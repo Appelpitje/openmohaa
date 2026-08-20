@@ -1113,6 +1113,10 @@ static void DMConsoleCommandHandler(const char *txt)
     int  iMode;
     char szStringOut[1024];
 
+    if (cg_chat && !cg_chat->integer) {
+        return;
+    }
+
     iMode = 0;
 
     if (dm_console->GetMessageMode() != 100) {
@@ -1336,6 +1340,10 @@ void UI_PrintConsole(const char *msg)
         }
 
         pszString++;
+
+        if (bDMMessage && cg_chat && !cg_chat->integer) {
+            return;
+        }
 
         //
         // print to the deathmatch console
@@ -1601,6 +1609,10 @@ void UI_OpenDMConsole(int iMode)
         return;
     }
 
+    if (cg_chat && !cg_chat->integer) {
+        return;
+    }
+
     UI_SetDMConsoleMode(iMode);
     dm_console->setShow(true);
     uWinMan.ActivateControl(dm_console);
@@ -1628,6 +1640,10 @@ UI_ToggleDMConsole
 void UI_ToggleDMConsole(int iMode)
 {
     if (!dm_console) {
+        return;
+    }
+
+    if (cg_chat && !cg_chat->integer) {
         return;
     }
 

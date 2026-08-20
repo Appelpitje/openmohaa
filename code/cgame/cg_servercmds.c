@@ -326,7 +326,11 @@ static void CG_ServerCommand(qboolean modelOnly)
     }
 
     if (!strcmp(cmd, "print") || !strcmp(cmd, "hudprint")) {
-        cgi.Printf("%s", cgi.Argv(1));
+        const char *text = cgi.Argv(1);
+        if (text && *text == MESSAGE_CHAT_WHITE && cg_chat && !cg_chat->integer) {
+            return;
+        }
+        cgi.Printf("%s", text);
         if (!strcmp(cmd, "hudprint")) {
             CG_HudPrint_f();
         }
