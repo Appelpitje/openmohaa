@@ -39,6 +39,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 static cvar_t *cl_discordRichPresence = NULL;
 static cvar_t *cl_discordAllowJoin = NULL;
+static cvar_t *cl_discordCdnUrl = NULL;
 static qboolean discord_initialized = qfalse;
 static int64_t discord_startTime = 0;
 static int discord_lastUpdateTime = 0;
@@ -127,6 +128,7 @@ void CL_DiscordInit(void)
 
     cl_discordRichPresence = Cvar_Get("cl_discordRichPresence", "0", CVAR_ARCHIVE);
     cl_discordAllowJoin = Cvar_Get("cl_discordAllowJoin", "1", CVAR_ARCHIVE);
+    cl_discordCdnUrl = Cvar_Get("cl_discordCdnUrl", "https://storage.moh-db.com/discord", CVAR_ARCHIVE);
 
     if (!cl_discordRichPresence->integer) {
         Com_Printf("Discord Rich Presence disabled (set cl_discordRichPresence 1 to enable)\n");
@@ -167,8 +169,12 @@ static void CL_DiscordUpdatePresence(void)
     char detailsBuffer[128];
     char partyIdBuffer[128];
     char joinSecretBuffer[128];
+    char largeImageBuffer[256];
+    char smallImageBuffer[256];
+    char largeTextBuffer[128];
+    char mapKey[64];
     const char *serverInfo;
-    const char *mapMessage;
+    const char *mapMessage = NULL;
     const char *serverName = NULL;
     int numClients = 0;
     int maxClients = 0;
@@ -178,8 +184,22 @@ static void CL_DiscordUpdatePresence(void)
     // Set the start timestamp for "elapsed" display
     presence.startTimestamp = discord_startTime;
 
-    // Note: largeImageKey/smallImageKey require assets uploaded to Discord Developer Portal
-    // Leave them as NULL to show presence without custom images
+    if (!cl_discordCdnUrl) {
+        cl_discordCdnUrl = Cvar_Get("cl_discordCdnUrl", "https://storage.moh-db.com/discord", CVAR_ARCHIVE);
+    }
+    const char *cdnUrl = (cl_discordCdnUrl && cl_discordCdnUrl->string[0]) ? cl_discordCdnUrl->string : "https://storage.moh-db.com/discord";
+
+    // Extract clean map name: "maps/obj_team1.bsp" -> "obj_team1"
+    const char *bsp = COM_SkipPath((char*)cl.mapname);
+    Q_strncpyz(mapKey, bsp, sizeof(mapKey));
+    char *ext = strstr(mapKey, ".bsp");
+    if (ext) *ext = '\0';
+    Q_strlwr(mapKey);
+
+    // Set OpenMoHAA badge icon
+    Com_sprintf(smallImageBuffer, sizeof(smallImageBuffer), "%s/logo.png", cdnUrl);
+    presence.smallImageKey = smallImageBuffer;
+    presence.smallImageText = "OpenMoHAA";
 
     switch (clc.state) {
         case CA_DISCONNECTED:
@@ -187,6 +207,10 @@ static void CL_DiscordUpdatePresence(void)
             Q_strncpyz(stateBuffer, "In Main Menu", sizeof(stateBuffer));
             presence.state = stateBuffer;
             presence.details = "Idle";
+
+            Com_sprintf(largeImageBuffer, sizeof(largeImageBuffer), "%s/maps/default_map.jpg", cdnUrl);
+            presence.largeImageKey = largeImageBuffer;
+            presence.largeImageText = "OpenMoHAA";
             break;
 
         case CA_CONNECTING:
@@ -198,6 +222,10 @@ static void CL_DiscordUpdatePresence(void)
                 Com_sprintf(detailsBuffer, sizeof(detailsBuffer), "Server: %s", clc.servername);
                 presence.details = detailsBuffer;
             }
+
+            Com_sprintf(largeImageBuffer, sizeof(largeImageBuffer), "%s/maps/default_map.jpg", cdnUrl);
+            presence.largeImageKey = largeImageBuffer;
+            presence.largeImageText = "Connecting...";
             break;
 
         case CA_LOADING:
@@ -206,7 +234,9 @@ static void CL_DiscordUpdatePresence(void)
             presence.state = stateBuffer;
             
             // Try to get full map name from CS_MESSAGE (worldspawn message)
-            mapMessage = cl.gameState.stringData + cl.gameState.stringOffsets[2]; // CS_MESSAGE = 2
+            if (cl.gameState.stringOffsets[2]) {
+                mapMessage = cl.gameState.stringData + cl.gameState.stringOffsets[2]; // CS_MESSAGE = 2
+            }
             if (mapMessage && mapMessage[0]) {
                 Com_sprintf(detailsBuffer, sizeof(detailsBuffer), "Map: %s", mapMessage);
                 presence.details = detailsBuffer;
@@ -214,6 +244,21 @@ static void CL_DiscordUpdatePresence(void)
                 // Fallback to BSP name
                 Com_sprintf(detailsBuffer, sizeof(detailsBuffer), "Map: %s", COM_SkipPath((char*)cl.mapname));
                 presence.details = detailsBuffer;
+            }
+
+            if (mapKey[0]) {
+                Com_sprintf(largeImageBuffer, sizeof(largeImageBuffer), "%s/maps/%s.jpg", cdnUrl, mapKey);
+                presence.largeImageKey = largeImageBuffer;
+                if (mapMessage && mapMessage[0]) {
+                    Q_strncpyz(largeTextBuffer, mapMessage, sizeof(largeTextBuffer));
+                } else {
+                    Q_strncpyz(largeTextBuffer, mapKey, sizeof(largeTextBuffer));
+                }
+                presence.largeImageText = largeTextBuffer;
+            } else {
+                Com_sprintf(largeImageBuffer, sizeof(largeImageBuffer), "%s/maps/default_map.jpg", cdnUrl);
+                presence.largeImageKey = largeImageBuffer;
+                presence.largeImageText = "OpenMoHAA";
             }
             break;
 
@@ -243,7 +288,9 @@ static void CL_DiscordUpdatePresence(void)
             presence.details = detailsBuffer;
 
             // Get full map name from CS_MESSAGE (worldspawn message field)
-            mapMessage = cl.gameState.stringData + cl.gameState.stringOffsets[2]; // CS_MESSAGE = 2
+            if (cl.gameState.stringOffsets[2]) {
+                mapMessage = cl.gameState.stringData + cl.gameState.stringOffsets[2]; // CS_MESSAGE = 2
+            }
             if (mapMessage && mapMessage[0]) {
                 Q_strncpyz(stateBuffer, mapMessage, sizeof(stateBuffer));
             } else if (cl.mapname[0]) {
@@ -257,6 +304,22 @@ static void CL_DiscordUpdatePresence(void)
                 Q_strncpyz(stateBuffer, "In Game", sizeof(stateBuffer));
             }
             presence.state = stateBuffer;
+
+            // Set map image
+            if (mapKey[0]) {
+                Com_sprintf(largeImageBuffer, sizeof(largeImageBuffer), "%s/maps/%s.jpg", cdnUrl, mapKey);
+                presence.largeImageKey = largeImageBuffer;
+                if (mapMessage && mapMessage[0]) {
+                    Q_strncpyz(largeTextBuffer, mapMessage, sizeof(largeTextBuffer));
+                } else {
+                    Q_strncpyz(largeTextBuffer, mapKey, sizeof(largeTextBuffer));
+                }
+                presence.largeImageText = largeTextBuffer;
+            } else {
+                Com_sprintf(largeImageBuffer, sizeof(largeImageBuffer), "%s/maps/default_map.jpg", cdnUrl);
+                presence.largeImageKey = largeImageBuffer;
+                presence.largeImageText = "OpenMoHAA";
+            }
 
             // Count players by checking CS_PLAYERS configstrings (slot 1684+)
             // CS_PLAYERS = 1684, MAX_CLIENTS = 64
@@ -307,11 +370,19 @@ static void CL_DiscordUpdatePresence(void)
             Q_strncpyz(stateBuffer, "Watching Cinematic", sizeof(stateBuffer));
             presence.state = stateBuffer;
             presence.details = "Cutscene";
+
+            Com_sprintf(largeImageBuffer, sizeof(largeImageBuffer), "%s/maps/default_map.jpg", cdnUrl);
+            presence.largeImageKey = largeImageBuffer;
+            presence.largeImageText = "Cutscene";
             break;
 
         default:
             Q_strncpyz(stateBuffer, "In Game", sizeof(stateBuffer));
             presence.state = stateBuffer;
+
+            Com_sprintf(largeImageBuffer, sizeof(largeImageBuffer), "%s/maps/default_map.jpg", cdnUrl);
+            presence.largeImageKey = largeImageBuffer;
+            presence.largeImageText = "OpenMoHAA";
             break;
     }
 

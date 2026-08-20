@@ -1,5 +1,5 @@
 set(PROJECT_NAME openmohaa)
-set(PROJECT_VERSION 0.83.1)
+set(PROJECT_VERSION 0.83.2)
 
 set(SERVER_NAME omohaaded)
 set(CLIENT_NAME openmohaa)
