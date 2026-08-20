@@ -8,6 +8,20 @@
 
 ![logo](misc/openmohaa-text-sm.png)
 
+> [!NOTE]
+> This repository is a fork of the official [OpenMoHAA](https://github.com/openmoh/openmohaa) upstream repository, maintained with additional features, quality-of-life enhancements, and platform fixes.
+> For details on all new features, cvars, and console commands, see [**FORK_FEATURES.md**](FORK_FEATURES.md).
+
+## ✨ Fork Features & Additions
+
+This fork includes extra features and enhancements built on top of OpenMoHAA:
+- 🎮 **Discord Rich Presence**: Integrated Discord RPC displaying live mission/server status, map, gametype, and player counts on your Discord profile.
+- 💬 **Multiplayer Chat Control**: Easily disable or toggle multiplayer chat and quick voice messages via `cg_chat` or console commands (`chat`, `togglechat`, `enablechat`, `disablechat`).
+- 🎯 **High-DPI / Window Resolution Mouse Scaling**: Fixed cursor and crosshair coordinate alignment when running on Retina / High-DPI screens or custom resolutions.
+- 🛠️ **macOS Build Compatibility**: Out-of-the-box support for compiling on modern macOS with bundled OpenAL headers and Apple Silicon host defaults.
+
+👉 **Full documentation and commands list: [FORK_FEATURES.md](FORK_FEATURES.md)**
+
 ## What is OpenMoHAA?
 
 OpenMoHAA is an open-source project aimed at preserving and enhancing **Medal of Honor: Allied Assault** (including Spearhead and Breakthrough expansions) by providing more features and bugfixes, across modern platforms and architectures.
