@@ -57,7 +57,8 @@ static int vidRestartTime = 0;
 
 static int in_eventTime = 0;
 
-static SDL_Window *SDL_window = NULL;
+SDL_Window *in_sdl_window = NULL;
+#define SDL_window in_sdl_window
 
 #define CTRL(a) ((a)-'a'+1)
 
@@ -410,8 +411,15 @@ static void IN_DeactivateMouse( qboolean isFullscreen )
 		SDL_SetRelativeMouseMode( SDL_FALSE );
 
 		// Don't warp the mouse unless the cursor is within the window
-		if( SDL_GetWindowFlags( SDL_window ) & SDL_WINDOW_MOUSE_FOCUS )
-			SDL_WarpMouseInWindow( SDL_window, cls.glconfig.vidWidth / 2, cls.glconfig.vidHeight / 2 );
+		if( SDL_GetWindowFlags( SDL_window ) & SDL_WINDOW_MOUSE_FOCUS ) {
+			int winW = 0, winH = 0;
+			SDL_GetWindowSize( SDL_window, &winW, &winH );
+			if ( winW > 0 && winH > 0 ) {
+				SDL_WarpMouseInWindow( SDL_window, winW / 2, winH / 2 );
+			} else {
+				SDL_WarpMouseInWindow( SDL_window, cls.glconfig.vidWidth / 2, cls.glconfig.vidHeight / 2 );
+			}
+		}
 
 		mouseActive = qfalse;
 	}

@@ -27,14 +27,47 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #endif
 
 #include "../qcommon/qcommon.h"
+#include "../client/client.h"
 
 static SDL_Cursor *cursor = NULL;
 static SDL_Surface *cursor_surface = NULL;
 static byte *cursor_image_data = NULL;
 static pCursorFree cursor_free = NULL;
 
+extern SDL_Window *in_sdl_window;
+
 void IN_GetMousePosition(int *x, int *y) {
-    SDL_GetMouseState(x, y);
+    int mx = 0, my = 0;
+    SDL_GetMouseState(&mx, &my);
+
+    SDL_Window *win = in_sdl_window ? in_sdl_window : (SDL_GetMouseFocus() ? SDL_GetMouseFocus() : SDL_GL_GetCurrentWindow());
+    if (win && cls.glconfig.vidWidth > 0 && cls.glconfig.vidHeight > 0) {
+        int winW = 0, winH = 0;
+        SDL_GetWindowSize(win, &winW, &winH);
+        if (winW > 0 && winH > 0 && (winW != cls.glconfig.vidWidth || winH != cls.glconfig.vidHeight)) {
+            mx = (int)((float)mx * (float)cls.glconfig.vidWidth / (float)winW);
+            my = (int)((float)my * (float)cls.glconfig.vidHeight / (float)winH);
+        }
+    }
+
+    if (mx < 0) {
+        mx = 0;
+    } else if (cls.glconfig.vidWidth > 0 && mx > cls.glconfig.vidWidth) {
+        mx = cls.glconfig.vidWidth;
+    }
+
+    if (my < 0) {
+        my = 0;
+    } else if (cls.glconfig.vidHeight > 0 && my > cls.glconfig.vidHeight) {
+        my = cls.glconfig.vidHeight;
+    }
+
+    if (x) {
+        *x = mx;
+    }
+    if (y) {
+        *y = my;
+    }
 }
 
 qboolean IN_SetCursorFromImage(const byte *pic, int width, int height, pCursorFree cursorFreeFn) {
