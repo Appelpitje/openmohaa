@@ -38,6 +38,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define DISCORD_UPDATE_INTERVAL 5000
 
 static cvar_t *cl_discordRichPresence = NULL;
+static cvar_t *cl_discordAllowJoin = NULL;
 static qboolean discord_initialized = qfalse;
 static int64_t discord_startTime = 0;
 static int discord_lastUpdateTime = 0;
@@ -82,6 +83,39 @@ static void Discord_HandleError(int errorCode, const char* message)
 
 /*
 ====================
+Discord_HandleJoinGame
+
+Called when user accepts a join invite or clicks Join on a Discord profile
+====================
+*/
+static void Discord_HandleJoinGame(const char* joinSecret)
+{
+    if (joinSecret && joinSecret[0]) {
+        Com_Printf("Discord: Joining game at %s\n", joinSecret);
+        Cbuf_AddText(va("connect \"%s\"\n", joinSecret));
+    }
+}
+
+/*
+====================
+Discord_HandleJoinRequest
+
+Called when Discord receives a join request from another user
+====================
+*/
+static void Discord_HandleJoinRequest(const DiscordUser* request)
+{
+    if (!request) {
+        return;
+    }
+    Com_Printf("Discord: Received join request from %s#%s (%s)\n",
+               request->username, request->discriminator, request->userId);
+    // Auto-accept request so the user can join the game directly
+    Discord_Respond(request->userId, DISCORD_REPLY_YES);
+}
+
+/*
+====================
 CL_DiscordInit
 
 Initialize Discord Rich Presence
@@ -92,6 +126,7 @@ void CL_DiscordInit(void)
     DiscordEventHandlers handlers;
 
     cl_discordRichPresence = Cvar_Get("cl_discordRichPresence", "0", CVAR_ARCHIVE);
+    cl_discordAllowJoin = Cvar_Get("cl_discordAllowJoin", "1", CVAR_ARCHIVE);
 
     if (!cl_discordRichPresence->integer) {
         Com_Printf("Discord Rich Presence disabled (set cl_discordRichPresence 1 to enable)\n");
@@ -104,6 +139,8 @@ void CL_DiscordInit(void)
     handlers.ready = Discord_HandleReady;
     handlers.disconnected = Discord_HandleDisconnected;
     handlers.errored = Discord_HandleError;
+    handlers.joinGame = Discord_HandleJoinGame;
+    handlers.joinRequest = Discord_HandleJoinRequest;
 
     Discord_Initialize(DISCORD_APP_ID, &handlers, 1, NULL);
 
@@ -128,6 +165,8 @@ static void CL_DiscordUpdatePresence(void)
     DiscordRichPresence presence;
     char stateBuffer[128];
     char detailsBuffer[128];
+    char partyIdBuffer[128];
+    char joinSecretBuffer[128];
     const char *serverInfo;
     const char *mapMessage;
     const char *serverName = NULL;
@@ -240,6 +279,28 @@ static void CL_DiscordUpdatePresence(void)
                 presence.partySize = 1; // At least the player themselves
                 presence.partyMax = maxClients;
             }
+
+            // Enable Discord "Join Game" feature when connected to a multiplayer server
+            {
+                qboolean isMultiplayer = (!clc.demoplaying && 
+                                          clc.serverAddress.type != NA_LOOPBACK && 
+                                          clc.serverAddress.type != NA_BAD);
+
+                if (!cl_discordAllowJoin) {
+                    cl_discordAllowJoin = Cvar_Get("cl_discordAllowJoin", "1", CVAR_ARCHIVE);
+                }
+
+                if (isMultiplayer && cl_discordAllowJoin->integer) {
+                    const char *serverAddrStr = NET_AdrToStringwPort(clc.serverAddress);
+                    Com_sprintf(partyIdBuffer, sizeof(partyIdBuffer), "party_%s", serverAddrStr);
+                    Q_strncpyz(joinSecretBuffer, serverAddrStr, sizeof(joinSecretBuffer));
+
+                    presence.partyId = partyIdBuffer;
+                    presence.joinSecret = joinSecretBuffer;
+                    presence.partyPrivacy = DISCORD_PARTY_PUBLIC;
+                    presence.instance = 1;
+                }
+            }
             break;
 
         case CA_CINEMATIC:
@@ -282,6 +343,8 @@ void CL_DiscordUpdate(void)
         handlers.ready = Discord_HandleReady;
         handlers.disconnected = Discord_HandleDisconnected;
         handlers.errored = Discord_HandleError;
+        handlers.joinGame = Discord_HandleJoinGame;
+        handlers.joinRequest = Discord_HandleJoinRequest;
 
         Discord_Initialize(DISCORD_APP_ID, &handlers, 1, NULL);
         discord_initialized = qtrue;
