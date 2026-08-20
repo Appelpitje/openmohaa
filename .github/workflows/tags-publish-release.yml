@@ -3,7 +3,8 @@ name: "Publish Release"
 on:
   push:
     tags:
-        - "v*.*.*"
+      - "v*.*.*"
+  workflow_dispatch:
 
 env:
   RELEASE_STAGE: ${{ vars.RELEASE_STAGE || 'unstable' }}
