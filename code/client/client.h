@@ -421,6 +421,7 @@ extern qboolean	scr_initialized;
 extern	cvar_t	*cl_nodelta;
 extern	cvar_t	*cl_debugMove;
 extern	cvar_t	*cl_noprint;
+extern	cvar_t	*cg_chat;
 extern	cvar_t	*cl_timegraph;
 extern	cvar_t	*cl_debuggraph;
 extern	cvar_t	*cl_timeout;
@@ -544,6 +545,10 @@ void CL_StartHunkUsers( qboolean rendererOnly );
 void CL_Connect( const char *server, netadrtype_t family );
 
 void CL_Disconnect_f (void);
+void CL_Chat_f(void);
+void CL_ToggleChat_f(void);
+void CL_EnableChat_f(void);
+void CL_DisableChat_f(void);
 void CL_GetChallengePacket (void);
 void CL_Vid_Restart_f( void );
 void CL_Snd_Restart_f (void);

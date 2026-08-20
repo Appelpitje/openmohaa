@@ -48,6 +48,7 @@ cvar_t	*cl_nodelta;
 cvar_t	*cl_debugMove;
 
 cvar_t	*cl_noprint;
+cvar_t	*cg_chat;
 cvar_t	*cl_motd;
 
 cvar_t	*rcon_client_password;
@@ -1290,6 +1291,78 @@ void CL_Disconnect_f( void ) {
 	} else {
 		UI_CloseConsole();
 	}
+}
+
+/*
+==================
+CL_Chat_f
+==================
+*/
+void CL_Chat_f( void ) {
+	if ( Cmd_Argc() < 2 ) {
+		if ( cg_chat && cg_chat->integer ) {
+			Cvar_Set( "cg_chat", "0" );
+			Com_Printf( "Multiplayer chat is now disabled.\n" );
+		} else {
+			Cvar_Set( "cg_chat", "1" );
+			Com_Printf( "Multiplayer chat is now enabled.\n" );
+		}
+		return;
+	}
+
+	const char *arg = Cmd_Argv( 1 );
+	if ( !Q_stricmp( arg, "1" ) || !Q_stricmp( arg, "on" ) || !Q_stricmp( arg, "enable" ) || !Q_stricmp( arg, "true" ) ) {
+		Cvar_Set( "cg_chat", "1" );
+		Com_Printf( "Multiplayer chat is now enabled.\n" );
+	} else if ( !Q_stricmp( arg, "0" ) || !Q_stricmp( arg, "off" ) || !Q_stricmp( arg, "disable" ) || !Q_stricmp( arg, "false" ) ) {
+		Cvar_Set( "cg_chat", "0" );
+		Com_Printf( "Multiplayer chat is now disabled.\n" );
+	} else if ( !Q_stricmp( arg, "toggle" ) ) {
+		if ( cg_chat && cg_chat->integer ) {
+			Cvar_Set( "cg_chat", "0" );
+			Com_Printf( "Multiplayer chat is now disabled.\n" );
+		} else {
+			Cvar_Set( "cg_chat", "1" );
+			Com_Printf( "Multiplayer chat is now enabled.\n" );
+		}
+	} else {
+		Com_Printf( "Usage: chat [0|1|on|off|enable|disable|toggle]\n" );
+	}
+}
+
+/*
+==================
+CL_ToggleChat_f
+==================
+*/
+void CL_ToggleChat_f( void ) {
+	if ( cg_chat && cg_chat->integer ) {
+		Cvar_Set( "cg_chat", "0" );
+		Com_Printf( "Multiplayer chat is now disabled.\n" );
+	} else {
+		Cvar_Set( "cg_chat", "1" );
+		Com_Printf( "Multiplayer chat is now enabled.\n" );
+	}
+}
+
+/*
+==================
+CL_EnableChat_f
+==================
+*/
+void CL_EnableChat_f( void ) {
+	Cvar_Set( "cg_chat", "1" );
+	Com_Printf( "Multiplayer chat is now enabled.\n" );
+}
+
+/*
+==================
+CL_DisableChat_f
+==================
+*/
+void CL_DisableChat_f( void ) {
+	Cvar_Set( "cg_chat", "0" );
+	Com_Printf( "Multiplayer chat is now disabled.\n" );
 }
 
 
@@ -3574,6 +3647,7 @@ void CL_Init( void ) {
 	//
 	wombat = Cvar_Get( "wombat", "0", 0 );
 	cl_noprint = Cvar_Get( "cl_noprint", "0", 0 );
+	cg_chat = Cvar_Get( "cg_chat", "1", CVAR_ARCHIVE );
 	// maybe we can set up our own motd server once :)
 	cl_motd = Cvar_Get ("cl_motd", "0", 0);
 
@@ -3742,6 +3816,10 @@ void CL_Init( void ) {
 	Cmd_AddCommand ("fs_referencedList", CL_ReferencedPK3List_f );
 	Cmd_AddCommand ("video", CL_Video_f );
 	Cmd_AddCommand ("stopvideo", CL_StopVideo_f );
+	Cmd_AddCommand ("chat", CL_Chat_f );
+	Cmd_AddCommand ("togglechat", CL_ToggleChat_f );
+	Cmd_AddCommand ("enablechat", CL_EnableChat_f );
+	Cmd_AddCommand ("disablechat", CL_DisableChat_f );
 	CL_InitConsoleCommands();
 	CL_InitRef();
 	CL_StartHunkUsers(qfalse);

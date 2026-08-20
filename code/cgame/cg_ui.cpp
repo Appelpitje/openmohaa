@@ -29,6 +29,11 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 void CG_MessageMode_f(void)
 {
+    if (!cg_chat->integer) {
+        cgi.Printf("Multiplayer chat is disabled (cg_chat is 0).\n");
+        return;
+    }
+
     if (!cgs.gametype) {
         return;
     }
@@ -38,6 +43,11 @@ void CG_MessageMode_f(void)
 
 void CG_MessageMode_All_f(void)
 {
+    if (!cg_chat->integer) {
+        cgi.Printf("Multiplayer chat is disabled (cg_chat is 0).\n");
+        return;
+    }
+
     if (!cgs.gametype) {
         return;
     }
@@ -47,6 +57,11 @@ void CG_MessageMode_All_f(void)
 
 void CG_MessageMode_Team_f(void)
 {
+    if (!cg_chat->integer) {
+        cgi.Printf("Multiplayer chat is disabled (cg_chat is 0).\n");
+        return;
+    }
+
     if (!cgs.gametype) {
         return;
     }
@@ -57,6 +72,11 @@ void CG_MessageMode_Team_f(void)
 void CG_MessageMode_Private_f(void)
 {
     int clientNum;
+
+    if (!cg_chat->integer) {
+        cgi.Printf("Multiplayer chat is disabled (cg_chat is 0).\n");
+        return;
+    }
 
     if (!cgs.gametype) {
         return;
@@ -73,6 +93,11 @@ void CG_MessageMode_Private_f(void)
 
 void CG_MessageSingleAll_f(void)
 {
+    if (!cg_chat->integer) {
+        cgi.Printf("Multiplayer chat is disabled (cg_chat is 0).\n");
+        return;
+    }
+
     if (!cgs.gametype) {
         return;
     }
@@ -86,6 +111,11 @@ void CG_MessageSingleAll_f(void)
 
 void CG_MessageSingleTeam_f(void)
 {
+    if (!cg_chat->integer) {
+        cgi.Printf("Multiplayer chat is disabled (cg_chat is 0).\n");
+        return;
+    }
+
     if (!cgs.gametype) {
         return;
     }
@@ -100,6 +130,11 @@ void CG_MessageSingleTeam_f(void)
 void CG_MessageSingleClient_f(void)
 {
     int clientNum;
+
+    if (!cg_chat->integer) {
+        cgi.Printf("Multiplayer chat is disabled (cg_chat is 0).\n");
+        return;
+    }
 
     if (!cgs.gametype) {
         return;
@@ -132,7 +167,7 @@ void CG_MessageSingleClient_f(void)
 
 void CG_InstaMessageMain_f(void)
 {
-    if (!voiceChat->integer) {
+    if (!voiceChat->integer || !cg_chat->integer) {
         return;
     }
 
@@ -145,6 +180,10 @@ void CG_InstaMessageMain_f(void)
 
 void CG_InstaMessageGroupA_f(void)
 {
+    if (!voiceChat->integer || !cg_chat->integer) {
+        return;
+    }
+
     if (!cgs.gametype) {
         return;
     }
@@ -154,6 +193,10 @@ void CG_InstaMessageGroupA_f(void)
 
 void CG_InstaMessageGroupB_f(void)
 {
+    if (!voiceChat->integer || !cg_chat->integer) {
+        return;
+    }
+
     if (!cgs.gametype) {
         return;
     }
@@ -163,6 +206,10 @@ void CG_InstaMessageGroupB_f(void)
 
 void CG_InstaMessageGroupC_f(void)
 {
+    if (!voiceChat->integer || !cg_chat->integer) {
+        return;
+    }
+
     if (!cgs.gametype) {
         return;
     }
@@ -172,6 +219,10 @@ void CG_InstaMessageGroupC_f(void)
 
 void CG_InstaMessageGroupD_f(void)
 {
+    if (!voiceChat->integer || !cg_chat->integer) {
+        return;
+    }
+
     if (!cgs.gametype) {
         return;
     }
@@ -181,6 +232,10 @@ void CG_InstaMessageGroupD_f(void)
 
 void CG_InstaMessageGroupE_f(void)
 {
+    if (!voiceChat->integer || !cg_chat->integer) {
+        return;
+    }
+
     if (!cgs.gametype) {
         return;
     }
@@ -191,6 +246,62 @@ void CG_InstaMessageGroupE_f(void)
 void CG_HudPrint_f(void)
 {
     cgi.Printf("\x1%s", cgi.Argv(1));
+}
+
+void CG_Chat_f(void)
+{
+    if (cgi.Argc() < 2) {
+        if (cg_chat && cg_chat->integer) {
+            cgi.Cvar_Set("cg_chat", "0");
+            cgi.Printf("Multiplayer chat is now disabled.\n");
+        } else {
+            cgi.Cvar_Set("cg_chat", "1");
+            cgi.Printf("Multiplayer chat is now enabled.\n");
+        }
+        return;
+    }
+
+    const char *arg = cgi.Argv(1);
+    if (!Q_stricmp(arg, "1") || !Q_stricmp(arg, "on") || !Q_stricmp(arg, "enable") || !Q_stricmp(arg, "true")) {
+        cgi.Cvar_Set("cg_chat", "1");
+        cgi.Printf("Multiplayer chat is now enabled.\n");
+    } else if (!Q_stricmp(arg, "0") || !Q_stricmp(arg, "off") || !Q_stricmp(arg, "disable") || !Q_stricmp(arg, "false")) {
+        cgi.Cvar_Set("cg_chat", "0");
+        cgi.Printf("Multiplayer chat is now disabled.\n");
+    } else if (!Q_stricmp(arg, "toggle")) {
+        if (cg_chat && cg_chat->integer) {
+            cgi.Cvar_Set("cg_chat", "0");
+            cgi.Printf("Multiplayer chat is now disabled.\n");
+        } else {
+            cgi.Cvar_Set("cg_chat", "1");
+            cgi.Printf("Multiplayer chat is now enabled.\n");
+        }
+    } else {
+        cgi.Printf("Usage: chat [0|1|on|off|enable|disable|toggle]\n");
+    }
+}
+
+void CG_ToggleChat_f(void)
+{
+    if (cg_chat && cg_chat->integer) {
+        cgi.Cvar_Set("cg_chat", "0");
+        cgi.Printf("Multiplayer chat is now disabled.\n");
+    } else {
+        cgi.Cvar_Set("cg_chat", "1");
+        cgi.Printf("Multiplayer chat is now enabled.\n");
+    }
+}
+
+void CG_EnableChat_f(void)
+{
+    cgi.Cvar_Set("cg_chat", "1");
+    cgi.Printf("Multiplayer chat is now enabled.\n");
+}
+
+void CG_DisableChat_f(void)
+{
+    cgi.Cvar_Set("cg_chat", "0");
+    cgi.Printf("Multiplayer chat is now disabled.\n");
 }
 
 qboolean CG_CheckCaptureKey(int key, qboolean down, unsigned int time)

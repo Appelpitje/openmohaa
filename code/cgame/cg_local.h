@@ -513,6 +513,7 @@ extern "C" {
     //
     extern cvar_t *cg_fov;
     extern cvar_t *cg_cheats;
+    extern cvar_t *cg_chat;
 
     //
     // cg_main.c
@@ -938,6 +939,10 @@ qboolean CG_LightStyleColor(int style, int realtime, vec4_t color, qboolean clam
     void CG_InstaMessageGroupD_f(void);
     void CG_InstaMessageGroupE_f(void);
     void CG_HudPrint_f(void);
+    void CG_Chat_f(void);
+    void CG_ToggleChat_f(void);
+    void CG_EnableChat_f(void);
+    void CG_DisableChat_f(void);
 
     qboolean CG_CheckCaptureKey(int key, qboolean down, unsigned int time);
 

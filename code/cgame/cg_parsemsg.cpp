@@ -1634,6 +1634,10 @@ void CG_ParseCGMessage_ver_15()
 
                 iOldEnt = current_entity_number;
 
+                if (!cg_chat->integer || !voiceChat->integer) {
+                    break;
+                }
+
                 if (bLocal) {
                     current_entity_number = iInfo;
 
