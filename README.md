@@ -15,6 +15,9 @@
 ## ✨ Fork Features & Additions
 
 This fork includes extra features and enhancements built on top of OpenMoHAA:
+- 🚀 **HTTPS Fast-DL & Auto ZIP Extraction**: Automatic high-speed downloads directly from Powell's Locker CDN (50–100+ MB/s) when joining servers with missing custom maps, skins, or mods. Fully supports Allied Assault, Spearhead (`mainta/`), and Breakthrough (`maintt/`), intelligent BSP resolution (`FS_ResolveMapPath`), duplicate download prevention, and automated safe ZIP unpacking.
+- 📊 **Multiplayer Download HUD**: Sleek bottom loading bar displaying live download throughput and byte progress synchronized with `loadingbar`.
+- 🛡️ **Map Checksum Tolerance**: `cg_ignoreMapChecksum` prevents abrupt disconnects on servers with slightly recompiled community maps while logging a clear warning.
 - 🎮 **Discord Rich Presence**: Integrated Discord RPC displaying live mission/server status, map, gametype, and player counts on your Discord profile (enable with `set cl_discordRichPresence 1`).
 
 <p align="center">
@@ -25,7 +28,7 @@ This fork includes extra features and enhancements built on top of OpenMoHAA:
 - 🎯 **High-DPI / Window Resolution Mouse Scaling**: Fixed cursor and crosshair coordinate alignment when running on Retina / High-DPI screens or custom resolutions.
 - 🛠️ **macOS Build Compatibility**: Out-of-the-box support for compiling on modern macOS with bundled OpenAL headers and Apple Silicon host defaults.
 
-👉 **Full documentation and commands list: [FORK_FEATURES.md](FORK_FEATURES.md)**
+👉 **Full documentation, architecture, and commands list: [FORK_FEATURES.md](FORK_FEATURES.md)**
 
 ## What is OpenMoHAA?
 

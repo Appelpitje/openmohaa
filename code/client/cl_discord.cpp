@@ -126,7 +126,7 @@ void CL_DiscordInit(void)
 {
     DiscordEventHandlers handlers;
 
-    cl_discordRichPresence = Cvar_Get("cl_discordRichPresence", "0", CVAR_ARCHIVE);
+    cl_discordRichPresence = Cvar_Get("cl_discordRichPresence", "1", CVAR_ARCHIVE);
     cl_discordAllowJoin = Cvar_Get("cl_discordAllowJoin", "1", CVAR_ARCHIVE);
     cl_discordCdnUrl = Cvar_Get("cl_discordCdnUrl", "https://storage.moh-db.com/discord", CVAR_ARCHIVE);
 
@@ -403,7 +403,7 @@ void CL_DiscordUpdate(void)
 
     // Check if Discord RPC cvar changed
     if (!cl_discordRichPresence) {
-        cl_discordRichPresence = Cvar_Get("cl_discordRichPresence", "0", CVAR_ARCHIVE);
+        cl_discordRichPresence = Cvar_Get("cl_discordRichPresence", "1", CVAR_ARCHIVE);
     }
 
     // Handle enable/disable at runtime

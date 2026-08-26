@@ -46,6 +46,8 @@ set(CLIENT_SOURCES
     ${SOURCE_DIR}/client/cl_uisoundpicker.cpp
     ${SOURCE_DIR}/client/cl_uistd.cpp
     ${SOURCE_DIR}/client/cl_uiview3d.cpp
+    ${SOURCE_DIR}/client/cl_workshop.cpp
+    ${SOURCE_DIR}/client/cl_uiworkshop.cpp
     ${SOURCE_DIR}/client/libmumblelink.c
     ${SOURCE_DIR}/client/qal.c
     ${SOURCE_DIR}/client/snd_codec_mp3.c
@@ -87,7 +89,7 @@ if(USE_RENDERER_DLOPEN)
 endif()
 
 if(USE_HTTP)
-    list(APPEND CLIENT_DEFINITIONS USE_HTTP)
+    list(APPEND CLIENT_DEFINITIONS USE_HTTP USE_CURL USE_CURL_DLOPEN)
 endif()
 
 if(USE_VOIP)

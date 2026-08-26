@@ -32,6 +32,13 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../cgame/cg_public.h"
 #include "../fgame/bg_public.h"
 
+typedef enum {
+	DL_SOURCE_NONE = 0,
+	DL_SOURCE_SERVER_HTTP = 1,
+	DL_SOURCE_FASTDL = 2,
+	DL_SOURCE_UDP = 3
+} dlSource_t;
+
 #ifdef USE_CURL
 #include "cl_curl.h"
 #endif /* USE_CURL */
@@ -210,11 +217,13 @@ typedef struct {
 	fileHandle_t download;
 	char		downloadTempName[MAX_OSPATH];
 	char		downloadName[MAX_OSPATH];
+	char		downloadRemoteName[MAX_OSPATH];
+	dlSource_t	downloadSource;
 #ifdef USE_CURL
 	qboolean	cURLEnabled;
 	qboolean	cURLUsed;
 	qboolean	cURLDisconnected;
-	char		downloadURL[MAX_OSPATH];
+	char		downloadURL[MAX_CVAR_VALUE_STRING];
 	CURL		*downloadCURL;
 	CURLM		*downloadCURLM;
 #endif /* USE_CURL */
@@ -226,6 +235,7 @@ typedef struct {
 	size_t		downloadSize;	// how many bytes we got
 	char		downloadList[MAX_INFO_STRING]; // list of paks we need to download
 	qboolean	downloadRestart;	// if true, we need to do another FS_Restart because we downloaded a pak
+	qboolean	fastDlMapAttempted;
 
 	// demo information
 	char		demoName[MAX_QPATH];
@@ -477,6 +487,8 @@ extern	cvar_t	*cl_activeAction;
 
 extern	cvar_t	*cl_allowDownload;
 extern  cvar_t  *cl_downloadMethod;
+extern	cvar_t	*cl_fastdl;
+extern	cvar_t	*cl_fastdl_url;
 extern	cvar_t	*cl_conXOffset;
 extern	cvar_t	*cl_inGameVideo;
 
@@ -559,6 +571,7 @@ void CL_ReadDemoMessage( void );
 void CL_StopRecord_f(void);
 
 void CL_InitDownloads(void);
+void CL_BeginDownload( const char *localName, const char *remoteName );
 void CL_NextDownload(void);
 
 void CL_GetPing( int n, char *buf, int buflen, int *pingtime );
@@ -687,6 +700,7 @@ void Con_Bottom( void );
 void	SCR_Init (void);
 void	SCR_DrawDebugGraph(void);
 void	SCR_DrawScreenField(void);
+void	SCR_DrawDownload(void);
 void	SCR_UpdateScreen (void);
 
 void	SCR_DebugGraph (float value);

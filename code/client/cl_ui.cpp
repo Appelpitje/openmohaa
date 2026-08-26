@@ -30,6 +30,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "cl_ui.h"
 #include "cl_uigamespy.h"
+#include "cl_uiworkshop.h"
 
 #include <chrono>
 
@@ -5378,6 +5379,8 @@ void CL_InitializeUI(void)
     Cmd_AddCommand("gotoreturnmenu", UI_PushReturnMenu_f);
     Cmd_AddCommand("salesscreen", UI_SalesScreen_f);
     Cmd_AddCommand("launchgamespy", UI_LaunchGameSpy_f);
+    Cmd_AddCommand("launchworkshop", UI_LaunchWorkshop_f);
+    Cmd_AddCommand("workshop", UI_LaunchWorkshop_f);
 
     if (developer->integer) {
         UColor bgColor;

@@ -659,64 +659,73 @@ At the moment only the "connect" command is supported.
 */
 char *Sys_ParseProtocolUri( const char *uri )
 {
-	// Both "quake3://" and "quake3:" can be used
-	if ( Q_strncmp( uri, PROTOCOL_HANDLER ":", strlen( PROTOCOL_HANDLER ":" ) ) )
+	// Both "openmohaa://" / "openmohaa:" and "discord-<appId>://" can be used
+	if ( !Q_strncmp( uri, PROTOCOL_HANDLER ":", strlen( PROTOCOL_HANDLER ":" ) ) )
+	{
+		uri += strlen( PROTOCOL_HANDLER ":" );
+	}
+#ifdef USE_DISCORD_RPC
+	else if ( !Q_strncmp( uri, "discord-1449151797166870722:", strlen( "discord-1449151797166870722:" ) ) )
+	{
+		uri += strlen( "discord-1449151797166870722:" );
+	}
+#endif
+	else
 	{
 		Com_Printf( "Sys_ParseProtocolUri: unsupported protocol.\n" );
 		return NULL;
 	}
-	uri += strlen( PROTOCOL_HANDLER ":" );
+
 	if ( !Q_strncmp( uri, "//", strlen( "//" ) ) )
 	{
 		uri += strlen( "//" );
 	}
 	Com_Printf( "Sys_ParseProtocolUri: %s\n", uri );
 
-	// At the moment, only "connect/hostname:port" is supported
+	// Support "connect/hostname:port", "join/hostname:port", or direct "hostname:port"
 	if ( !Q_strncmp( uri, "connect/", strlen( "connect/" ) ) )
 	{
-		int i, bufsize;
-		char *out;
-
 		uri += strlen( "connect/" );
-		if ( *uri == '\0' || *uri == '?' )
-		{
-			Com_Printf( "Sys_ParseProtocolUri: missing argument.\n" );
-			return NULL;
-		}
-
-		// Check for any unsupported characters
-		// For safety reasons, the "hostname:port" part can only
-		// contain characters from: a-zA-Z0-9.:-[]
-		for ( i=0; uri[i] != '\0'; i++ )
-		{
-			if ( uri[i] == '?' )
-			{
-				// For forwards compatibility, any query string parameters are ignored (e.g. "?password=abcd")
-				// However, these are not passed on macOS, so it may be a bad idea to add them.
-				break;
-			}
-
-			if ( isalpha( uri[i] ) == 0 && isdigit( uri[i] ) == 0
-				&& uri[i] != '.' && uri[i] != ':' && uri[i] != '-'
-				&& uri[i] != '[' && uri[i] != ']' )
-			{
-				Com_Printf( "Sys_ParseProtocolUri: hostname contains unsupported character.\n" );
-				return NULL;
-			}
-		}
-
-		bufsize = strlen( "connect " ) + i + 1;
-		out = malloc( bufsize );
-		strcpy( out, "connect " );
-		strncat( out, uri, i );
-		return out;
 	}
-	else
+	else if ( !Q_strncmp( uri, "join/", strlen( "join/" ) ) )
 	{
-		Com_Printf( "Sys_ParseProtocolUri: unsupported command.\n" );
+		uri += strlen( "join/" );
+	}
+
+	if ( *uri == '\0' || *uri == '?' )
+	{
+		Com_Printf( "Sys_ParseProtocolUri: missing argument.\n" );
 		return NULL;
 	}
+
+	int i, bufsize;
+	char *out;
+
+	// Check for any unsupported characters
+	// For safety reasons, the "hostname:port" part can only
+	// contain characters from: a-zA-Z0-9.:-[]
+	for ( i=0; uri[i] != '\0'; i++ )
+	{
+		if ( uri[i] == '?' )
+		{
+			// For forwards compatibility, any query string parameters are ignored (e.g. "?password=abcd")
+			break;
+		}
+
+		if ( isalpha( uri[i] ) == 0 && isdigit( uri[i] ) == 0
+			&& uri[i] != '.' && uri[i] != ':' && uri[i] != '-'
+			&& uri[i] != '[' && uri[i] != ']' )
+		{
+			Com_Printf( "Sys_ParseProtocolUri: hostname contains unsupported character.\n" );
+			return NULL;
+		}
+	}
+
+	bufsize = strlen( "connect " ) + i + 1;
+	out = malloc( bufsize );
+	strcpy( out, "connect " );
+	strncat( out, uri, i );
+	return out;
 }
 #endif
 

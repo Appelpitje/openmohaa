@@ -75,3 +75,67 @@ bind F10 "togglechat"
 
 - **macOS OpenAL Support**: Updated CMake OpenAL resolution logic to ensure internal OpenAL headers (`alext.h`) are utilized on macOS, avoiding missing header errors when building with AppleClang / Xcode.
 - **Universal Architecture Defaults**: Ensures native host architecture (`arm64` on Apple Silicon) is built by default without requiring cross-compilation toolchains.
+
+---
+
+## 5. HTTPS Fast-DL & Automatic ZIP Extraction
+
+Integrated high-speed HTTPS package downloading (Fast-DL) connected directly to the Powell's Locker API and global Cloudflare CDN network.
+
+### Architecture Overview
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Player as OpenMoHAA Client
+    participant Engine as Engine FS & Scanner
+    participant Server as Game Server
+    participant API as Powell's Locker API
+    participant CDN as Cloudflare CDN
+
+    Player->>Server: Connect to Multiplayer Server
+    Server-->>Player: GameState with missing map / pak
+    
+    Player->>Engine: FS_MapExists() & FS_FileExists_HomeData()
+    alt Map or package already present on disk
+        Engine-->>Player: Skip download -> Continue connection
+    else Map missing locally
+        Player->>API: GET /api/v1/fastdl/{filename}
+        API->>API: Score & rank best candidate (.pk3 or .zip)
+        API-->>Player: 302 Found (Location: https://storage.moh-db.com/...)
+        Player->>CDN: Download stream (HTTP/2 at 50-100+ MB/s)
+        
+        loop Real-time Progress
+            Player->>Player: Update bottom progress bar & 'loadingbar' CVar
+        end
+
+        alt ZIP Archive
+            Player->>Player: Safe extraction with zip-bomb & path traversal guards
+        else PK3 Package
+            Player->>Player: Save to main/, mainta/, or maintt/
+        end
+
+        Player->>Engine: FS_Restart()
+        Player->>Server: Complete connection -> Spawn into game!
+    end
+```
+
+### Features
+- **All Expansions Supported**: Automatically detects the active game mode and routes downloads to the correct folder:
+  - **Allied Assault (`com_target_game 0`)**: `~/Library/Application Support/openmohaa/main/`
+  - **Spearhead (`com_target_game 1`)**: `~/Library/Application Support/openmohaa/mainta/`
+  - **Breakthrough (`com_target_game 2`)**: `~/Library/Application Support/openmohaa/maintt/`
+- **Intelligent BSP Scanner (`FS_MapExists`)**: Scans all loaded `.pk3` files in memory for any BSP matching the map name (e.g. matching `maps/dm/user_98foucarville.bsp` for `dm/foucarville`), preventing false missing-map triggers.
+- **Loop Prevention**: Checks if the package already exists on disk (`FS_FileExists_HomeData`), ensuring packages are never repeatedly re-downloaded.
+- **Automated ZIP Extraction**: Downloaded `.zip` archives containing `.pk3` packages are safely unpacked into the target directory with strict path-traversal and zip-bomb security protections.
+- **Authentic Bottom Progress Bar**: Displays live download progress, throughput (e.g. `14.2 MB/s`), and byte counts along the bottom of the screen while keeping the original multiplayer connecting screen visible.
+- **Multi-tier Download Pipeline**: `sv_dlURL` -> Powell's Locker Fast-DL -> UDP Download (if permitted).
+
+### CVars
+| CVar | Default | Values | Description |
+|------|---------|--------|-------------|
+| `cl_fastdl` | `1` | `0`, `1`, or `2` | `1` enables intelligent hybrid fallback (tries server `sv_dlURL` first, then Powell's Locker Fast-DL, then UDP); `2` prioritizes Powell's Locker Fast-DL first; `0` disables Fast-DL. |
+| `cl_fastdl_url` | `https://api.powellslocker.com/api/v1/fastdl` | string URL | Base endpoint for Fast-DL package resolution and downloads. |
+| `loadingbar` | `0.0` | `0.0` to `1.0` | Read/write progress fraction synchronized during downloads and map loading. |
+
+
