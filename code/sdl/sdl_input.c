@@ -1217,7 +1217,11 @@ static void IN_ProcessEvents( void )
 					char *filename = e.drop.file;
 
 					// Handle macOS open URL event. URL protocol scheme must be set in Info.plist.
-					if( !Q_strncmp( filename, PROTOCOL_HANDLER ":", strlen( PROTOCOL_HANDLER ":" ) ) )
+					if( !Q_strncmp( filename, PROTOCOL_HANDLER ":", strlen( PROTOCOL_HANDLER ":" ) )
+#ifdef USE_DISCORD_RPC
+						|| !Q_strncmp( filename, "discord-1449151797166870722:", strlen( "discord-1449151797166870722:" ) )
+#endif
+					)
 					{
 						char *protocolCommand = Sys_ParseProtocolUri( filename );
 

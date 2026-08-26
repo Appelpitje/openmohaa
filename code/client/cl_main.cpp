@@ -40,6 +40,10 @@ extern "C" {
 
 #include <climits>
 
+#ifdef USE_DISCORD_RPC
+#include "cl_discord.h"
+#endif
+
 #ifdef USE_RENDERER_DLOPEN
 cvar_t* cl_renderer;
 #endif
@@ -2845,6 +2849,10 @@ void CL_Frame ( int msec ) {
 	// advance local effects for next frame
 	SCR_RunCinematic();
 
+#ifdef USE_DISCORD_RPC
+	CL_DiscordUpdate();
+#endif
+
 	cls.framecount++;
 }
 
@@ -3773,6 +3781,10 @@ void CL_Init( void ) {
 	}
 
 	Com_Printf( "----- Client Initialization Complete ----- %i ms\n", start - end );
+
+#ifdef USE_DISCORD_RPC
+	CL_DiscordInit();
+#endif
 }
 
 
@@ -3833,6 +3845,10 @@ void CL_Shutdown(const char* finalmsg, qboolean disconnect, qboolean quit) {
 	Cmd_RemoveCommand ("model");
 	Cmd_RemoveCommand ("video");
 	Cmd_RemoveCommand ("stopvideo");
+
+#ifdef USE_DISCORD_RPC
+	CL_DiscordShutdown();
+#endif
 
 	CL_ShutdownInput();
 

@@ -15,6 +15,7 @@ set(CLIENT_SOURCES
     ${SOURCE_DIR}/client/cl_cin.cpp
     ${SOURCE_DIR}/client/cl_consolecmds.cpp
     ${SOURCE_DIR}/client/cl_curl.c
+    ${SOURCE_DIR}/client/cl_discord.cpp
     ${SOURCE_DIR}/client/cl_input.cpp
     ${SOURCE_DIR}/client/cl_instantAction.cpp
     ${SOURCE_DIR}/client/cl_inv.cpp
@@ -93,6 +94,47 @@ endif()
 if(USE_MUMBLE)
     list(APPEND CLIENT_DEFINITIONS USE_MUMBLE)
     list(APPEND CLIENT_LIBRARY_SOURCES ${SOURCE_DIR}/client/libmumblelink.c)
+endif()
+
+# Discord Rich Presence
+if(USE_DISCORD_RPC)
+    list(APPEND CLIENT_DEFINITIONS USE_DISCORD_RPC)
+    list(APPEND CLIENT_INCLUDE_DIRS
+        ${SOURCE_DIR}/thirdparty/discord-rpc/include
+        ${SOURCE_DIR}/thirdparty/discord-rpc/src
+    )
+
+    set(DISCORD_RPC_SOURCES
+        ${SOURCE_DIR}/thirdparty/discord-rpc/src/discord_rpc.cpp
+        ${SOURCE_DIR}/thirdparty/discord-rpc/src/rpc_connection.cpp
+        ${SOURCE_DIR}/thirdparty/discord-rpc/src/serialization.cpp
+    )
+
+    if(WIN32)
+        list(APPEND CLIENT_DEFINITIONS DISCORD_WINDOWS)
+        list(APPEND DISCORD_RPC_SOURCES
+            ${SOURCE_DIR}/thirdparty/discord-rpc/src/connection_win.cpp
+            ${SOURCE_DIR}/thirdparty/discord-rpc/src/discord_register_win.cpp
+        )
+        list(APPEND CLIENT_LIBRARIES psapi advapi32)
+    elseif(APPLE)
+        list(APPEND CLIENT_DEFINITIONS DISCORD_OSX)
+        list(APPEND DISCORD_RPC_SOURCES
+            ${SOURCE_DIR}/thirdparty/discord-rpc/src/connection_unix.cpp
+            ${SOURCE_DIR}/thirdparty/discord-rpc/src/discord_register_osx.m
+        )
+        list(APPEND CLIENT_LIBRARIES "-framework AppKit")
+    else()
+        list(APPEND CLIENT_DEFINITIONS DISCORD_LINUX)
+        list(APPEND DISCORD_RPC_SOURCES
+            ${SOURCE_DIR}/thirdparty/discord-rpc/src/connection_unix.cpp
+            ${SOURCE_DIR}/thirdparty/discord-rpc/src/discord_register_linux.cpp
+        )
+        list(APPEND CLIENT_LIBRARIES pthread)
+    endif()
+
+    disable_warnings(${DISCORD_RPC_SOURCES})
+    list(APPEND CLIENT_LIBRARY_SOURCES ${DISCORD_RPC_SOURCES})
 endif()
 
 list(APPEND CLIENT_BINARY_SOURCES
