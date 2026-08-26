@@ -2049,7 +2049,7 @@ void CL_NextDownload(void) {
 
 #ifdef USE_CURL
 		if ( CL_cURL_Init() ) {
-			// Mode 2: Aggressive FastDL (Always prioritize Powell's Locker CDN first)
+			// Mode 2: Aggressive FastDL (Always prioritize MOH-DB CDN first)
 			if ( cl_fastdl && cl_fastdl->integer == 2 ) {
 				CL_FastDL_BeginDownload( localName, remoteName );
 				useCURL = qtrue;
@@ -2059,7 +2059,7 @@ void CL_NextDownload(void) {
 				CL_cURL_BeginDownload( localName, va( "%s/%s", clc.sv_dlURL, remoteName ), DL_SOURCE_SERVER_HTTP );
 				useCURL = qtrue;
 			}
-			// If server has no valid sv_dlURL or redirect is disabled on server, use Powell's Locker FastDL if cl_fastdl is enabled
+			// If server has no valid sv_dlURL or redirect is disabled on server, use MOH-DB FastDL if cl_fastdl is enabled
 			else if ( cl_fastdl && cl_fastdl->integer >= 1 ) {
 				CL_FastDL_BeginDownload( localName, remoteName );
 				useCURL = qtrue;

@@ -526,9 +526,9 @@ void CL_cURL_PerformDownload(void)
 			qcurl_easy_getinfo( msg->easy_handle, CURLINFO_RESPONSE_CODE, &code );
 		}
 
-		// Fallback 1: If server sv_dlURL failed, attempt Powell's Locker Fast-DL
+		// Fallback 1: If server sv_dlURL failed, attempt MOH-DB Fast-DL
 		if( clc.downloadSource == DL_SOURCE_SERVER_HTTP && cl_fastdl && cl_fastdl->integer > 0 ) {
-			Com_Printf( "Server HTTP download failed for '%s' (HTTP %ld / %s). Attempting Powell's Locker Fast-DL...\n",
+			Com_Printf( "Server HTTP download failed for '%s' (HTTP %ld / %s). Attempting MOH-DB Fast-DL...\n",
 				clc.downloadRemoteName, code, qcurl_easy_strerror( msg->data.result ) );
 			FS_Remove_HomeData( clc.downloadTempName );
 			CL_cURL_Cleanup();
@@ -536,9 +536,9 @@ void CL_cURL_PerformDownload(void)
 			return;
 		}
 
-		// Fallback 2: If Powell's Locker Fast-DL failed, fallback to UDP ONLY IF explicitly allowed
+		// Fallback 2: If MOH-DB Fast-DL failed, fallback to UDP ONLY IF explicitly allowed
 		if( clc.downloadSource == DL_SOURCE_FASTDL && ( cl_allowDownload->integer & DLF_ENABLE ) && !( cl_allowDownload->integer & DLF_NO_UDP ) && cl_fastdl->integer < 2 ) {
-			Com_Printf( "Fast-DL package '%s' not found on Powell's Locker (HTTP %ld). Falling back to UDP download...\n",
+			Com_Printf( "Fast-DL package '%s' not found on MOH-DB (HTTP %ld). Falling back to UDP download...\n",
 				clc.downloadRemoteName, code );
 			FS_Remove_HomeData( clc.downloadTempName );
 			CL_cURL_Cleanup();
@@ -549,7 +549,7 @@ void CL_cURL_PerformDownload(void)
 
 		// If all sources failed or UDP is disabled
 		FS_Remove_HomeData( clc.downloadTempName );
-		Com_Error( ERR_DROP, "Download Error: '%s' could not be downloaded (HTTP %ld: %s).\nYou can download it manually from https://powellslocker.com",
+		Com_Error( ERR_DROP, "Download Error: '%s' could not be downloaded (HTTP %ld: %s).\nYou can download it manually from https://moh-db.com",
 			clc.downloadRemoteName, code, qcurl_easy_strerror( msg->data.result ) );
 	}
 }

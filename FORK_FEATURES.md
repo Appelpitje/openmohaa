@@ -80,7 +80,7 @@ bind F10 "togglechat"
 
 ## 5. HTTPS Fast-DL & Automatic ZIP Extraction
 
-Integrated high-speed HTTPS package downloading (Fast-DL) connected directly to the Powell's Locker API and global Cloudflare CDN network.
+Integrated high-speed HTTPS package downloading (Fast-DL) connected directly to the MOH-DB API and global Cloudflare CDN network.
 
 ### Architecture Overview
 
@@ -90,7 +90,7 @@ sequenceDiagram
     actor Player as OpenMoHAA Client
     participant Engine as Engine FS & Scanner
     participant Server as Game Server
-    participant API as Powell's Locker API
+    participant API as MOH-DB API
     participant CDN as Cloudflare CDN
 
     Player->>Server: Connect to Multiplayer Server
@@ -129,13 +129,13 @@ sequenceDiagram
 - **Loop Prevention**: Checks if the package already exists on disk (`FS_FileExists_HomeData`), ensuring packages are never repeatedly re-downloaded.
 - **Automated ZIP Extraction**: Downloaded `.zip` archives containing `.pk3` packages are safely unpacked into the target directory with strict path-traversal and zip-bomb security protections.
 - **Authentic Bottom Progress Bar**: Displays live download progress, throughput (e.g. `14.2 MB/s`), and byte counts along the bottom of the screen while keeping the original multiplayer connecting screen visible.
-- **Multi-tier Download Pipeline**: `sv_dlURL` -> Powell's Locker Fast-DL -> UDP Download (if permitted).
+- **Multi-tier Download Pipeline**: `sv_dlURL` -> MOH-DB Fast-DL -> UDP Download (if permitted).
 
 ### CVars
 | CVar | Default | Values | Description |
 |------|---------|--------|-------------|
-| `cl_fastdl` | `1` | `0`, `1`, or `2` | `1` enables intelligent hybrid fallback (tries server `sv_dlURL` first, then Powell's Locker Fast-DL, then UDP); `2` prioritizes Powell's Locker Fast-DL first; `0` disables Fast-DL. |
-| `cl_fastdl_url` | `https://api.powellslocker.com/api/v1/fastdl` | string URL | Base endpoint for Fast-DL package resolution and downloads. |
+| `cl_fastdl` | `1` | `0`, `1`, or `2` | `1` enables intelligent hybrid fallback (tries server `sv_dlURL` first, then MOH-DB Fast-DL, then UDP); `2` prioritizes MOH-DB Fast-DL first; `0` disables Fast-DL. |
+| `cl_fastdl_url` | `https://api.moh-db.com/api/v1/fastdl` | string URL | Base endpoint for Fast-DL package resolution and downloads. |
 | `loadingbar` | `0.0` | `0.0` to `1.0` | Read/write progress fraction synchronized during downloads and map loading. |
 
 
