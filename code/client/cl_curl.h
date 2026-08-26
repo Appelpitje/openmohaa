@@ -33,6 +33,10 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
   #include <curl/curl.h>
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifdef USE_CURL_DLOPEN
 #ifdef WIN32
   #define DEFAULT_CURL_LIB "libcurl-4.dll"
@@ -93,10 +97,6 @@ extern const char *(*qcurl_multi_strerror)(CURLMcode);
 #define qcurl_multi_cleanup curl_multi_cleanup
 #define qcurl_multi_info_read curl_multi_info_read
 #define qcurl_multi_strerror curl_multi_strerror
-#endif
-
-#ifdef __cplusplus
-extern "C" {
 #endif
 
 qboolean CL_cURL_Init( void );
