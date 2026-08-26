@@ -33,12 +33,17 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
   #include <curl/curl.h>
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifdef USE_CURL_DLOPEN
 #ifdef WIN32
   #define DEFAULT_CURL_LIB "libcurl-4.dll"
   #define ALTERNATE_CURL_LIB "libcurl-3.dll"
 #elif defined(__APPLE__)
-  #define DEFAULT_CURL_LIB "libcurl.dylib"
+  #define DEFAULT_CURL_LIB "libcurl.4.dylib"
+  #define ALTERNATE_CURL_LIB "libcurl.dylib"
 #else
   #define DEFAULT_CURL_LIB "libcurl.so.4"
   #define ALTERNATE_CURL_LIB "libcurl.so.3"
@@ -96,7 +101,12 @@ extern const char *(*qcurl_multi_strerror)(CURLMcode);
 
 qboolean CL_cURL_Init( void );
 void CL_cURL_Shutdown( void );
-void CL_cURL_BeginDownload( const char *localName, const char *remoteURL );
+void CL_cURL_BeginDownload( const char *localName, const char *remoteURL, dlSource_t source );
+void CL_FastDL_BeginDownload( const char *localName, const char *remoteName );
 void CL_cURL_PerformDownload( void );
 void CL_cURL_Cleanup( void );
+
+#ifdef __cplusplus
+}
+#endif
 #endif	// __QCURL_H__

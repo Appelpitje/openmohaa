@@ -750,6 +750,9 @@ qboolean	FS_ConditionalRestart( int checksumFeed, qboolean disconnect );
 void	FS_Restart( int checksumFeed );
 // shutdown and restart the filesystem so changes to fs_gamedir can take effect
 
+qboolean FS_AddPakFile( const char *pakfile, const char *dir );
+// hot-mount a single .pk3 archive dynamically into the active search paths
+
 char	**FS_ListFilteredFiles( const char *path, const char *extension, const char *filter, qboolean wantSubs, int *numfiles, qboolean allowNonPureFilesOnDisk );
 char	**FS_ListFiles( const char *directory, const char *extension, qboolean wantSubs, int *numfiles );
 // directory should not have either a leading or trailing /
@@ -790,6 +793,7 @@ fileHandle_t FS_BaseDir_FOpenFileWrite_HomeData( const char *filename );
 fileHandle_t FS_BaseDir_FOpenFileWrite_HomeState( const char *filename );
 long		FS_BaseDir_FOpenFileRead( const char *filename, fileHandle_t *fp );
 void	FS_BaseDir_Rename_HomeData( const char *from, const char *to, qboolean safe );
+void	FS_Rename_HomeData( const char *from, const char *to, qboolean safe );
 void	FS_CanonicalFilename( char *filename );
 
 long	FS_FOpenFileRead(const char* filename, fileHandle_t* file, qboolean uniqueFILE, qboolean quiet);
@@ -801,6 +805,10 @@ long	FS_FOpenFileRead(const char* filename, fileHandle_t* file, qboolean uniqueF
 
 int		FS_FileIsInPAK(const char *filename, int *pChecksum );
 // returns 1 if a file is in the PAK file, otherwise -1
+
+qboolean	FS_FileExistsAnyPak(const char *filename);
+qboolean	FS_MapExists(const char *mapname);
+qboolean	FS_ResolveMapPath(const char *name, char *outPath, size_t outPathSize);
 
 size_t	FS_Write( const void *buffer, size_t len, fileHandle_t f );
 

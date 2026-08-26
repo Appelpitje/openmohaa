@@ -215,8 +215,10 @@ void Cbuf_Execute (int msec)
 
 			if ( !(quotes&1)) {
 				if (i < cmd_text.cursize - 1) {
-					if (! in_star_comment && text[i] == '/' && text[i+1] == '/')
-						in_slash_comment = qtrue;
+					if (! in_star_comment && text[i] == '/' && text[i+1] == '/') {
+						if ( i == 0 || text[i-1] != ':' )
+							in_slash_comment = qtrue;
+					}
 					else if (! in_slash_comment && text[i] == '/' && text[i+1] == '*')
 						in_star_comment = qtrue;
 					else if (in_star_comment && text[i] == '*' && text[i+1] == '/') {
@@ -721,7 +723,9 @@ static void Cmd_TokenizeString2( const char *text_in, qboolean ignoreQuotes ) {
 			}
 
 			if ( text[0] == '/' && text[1] == '/' ) {
-				break;
+				if ( textOut == cmd_argv[cmd_argc-1] || *(textOut-1) != ':' ) {
+					break;
+				}
 			}
 
 			// skip /* */ comments

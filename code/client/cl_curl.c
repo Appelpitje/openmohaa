@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #ifdef USE_CURL
 #include "client.h"
+#include "../qcommon/unzip.h"
 
 #ifdef USE_CURL_DLOPEN
 #include "../sys/sys_loadlib.h"
@@ -98,8 +99,12 @@ qboolean CL_cURL_Init()
 	if(!(cURLLib = Sys_LoadDll(cl_cURLLib->string, qtrue)))
 	{
 #ifdef ALTERNATE_CURL_LIB
-		// On some linux distributions there is no libcurl.so.3, but only libcurl.so.4. That one works too.
 		if(!(cURLLib = Sys_LoadDll(ALTERNATE_CURL_LIB, qtrue)))
+#endif
+#ifdef __APPLE__
+		if(!(cURLLib = Sys_LoadDll("/usr/lib/libcurl.4.dylib", qtrue)))
+		if(!(cURLLib = Sys_LoadDll("/usr/lib/libcurl.dylib", qtrue)))
+		if(!(cURLLib = Sys_LoadDll("/opt/homebrew/opt/curl/lib/libcurl.dylib", qtrue)))
 #endif
 			return qfalse;
 	}
@@ -203,18 +208,33 @@ void CL_cURL_Cleanup(void)
 static int CL_cURL_CallbackProgress( void *dummy, double dltotal, double dlnow,
 	double ultotal, double ulnow )
 {
-	clc.downloadSize = (int)dltotal;
-	Cvar_SetValue( "cl_downloadSize", clc.downloadSize );
-	clc.downloadCount = (int)dlnow;
-	Cvar_SetValue( "cl_downloadCount", clc.downloadCount );
+	if ( dltotal > 0 ) {
+		clc.downloadSize = (size_t)dltotal;
+		Cvar_SetValue( "cl_downloadSize", (int)clc.downloadSize );
+	}
+	if ( dlnow > 0 ) {
+		clc.downloadCount = (size_t)dlnow;
+		Cvar_SetValue( "cl_downloadCount", (int)clc.downloadCount );
+	}
+	if ( clc.downloadSize > 0 ) {
+		float frac = (float)clc.downloadCount / (float)clc.downloadSize;
+		Cvar_SetValue( "loadingbar", frac );
+	}
 	return 0;
 }
 
 static size_t CL_cURL_CallbackWrite(void *buffer, size_t size, size_t nmemb,
 	void *stream)
 {
-	FS_Write( buffer, size*nmemb, ((fileHandle_t*)stream)[0] );
-	return size*nmemb;
+	size_t bytes = size * nmemb;
+	size_t written = FS_Write( buffer, bytes, ((fileHandle_t*)stream)[0] );
+	clc.downloadCount += bytes;
+	Cvar_SetValue( "cl_downloadCount", (int)clc.downloadCount );
+	if ( clc.downloadSize > 0 ) {
+		float frac = (float)clc.downloadCount / (float)clc.downloadSize;
+		Cvar_SetValue( "loadingbar", frac );
+	}
+	return written;
 }
 
 CURLcode qcurl_easy_setopt_warn(CURL *curl, CURLoption option, ...)
@@ -243,85 +263,182 @@ CURLcode qcurl_easy_setopt_warn(CURL *curl, CURLoption option, ...)
 	return result;
 }
 
-void CL_cURL_BeginDownload( const char *localName, const char *remoteURL )
+static qboolean CL_ProcessDownloadedFile( const char *tempName, const char *destName )
+{
+	const char *homedatapath;
+	const char *gamedir;
+	char *ospath;
+	unzFile uf;
+	unz_global_info gi;
+	int err;
+	int i;
+	int extractedPk3Count = 0;
+
+	homedatapath = Cvar_VariableString( "fs_homedatapath" );
+	gamedir = FS_Gamedir();
+	ospath = FS_BuildOSPath( homedatapath, gamedir, tempName );
+
+	uf = unzOpen( ospath );
+	if ( !uf ) {
+		// Not a zip file or unzOpen failed: directly rename to destination
+		FS_Rename_HomeData( tempName, destName, qfalse );
+		return qtrue;
+	}
+
+	err = unzGetGlobalInfo( uf, &gi );
+	if ( err != UNZ_OK || gi.number_entry == 0 ) {
+		unzClose( uf );
+		FS_Rename_HomeData( tempName, destName, qfalse );
+		return qtrue;
+	}
+
+	// First pass: scan if there are any .pk3 files inside this zip
+	unzGoToFirstFile( uf );
+	for ( i = 0; i < gi.number_entry; i++ ) {
+		char filename_inzip[MAX_OSPATH];
+		unz_file_info file_info;
+
+		err = unzGetCurrentFileInfo( uf, &file_info, filename_inzip, sizeof( filename_inzip ), NULL, 0, NULL, 0 );
+		if ( err == UNZ_OK ) {
+			size_t len = strlen( filename_inzip );
+			if ( len > 4 && !Q_stricmp( filename_inzip + len - 4, ".pk3" ) ) {
+				extractedPk3Count++;
+			}
+		}
+		unzGoToNextFile( uf );
+	}
+
+	// If the archive contains .pk3 file(s), extract each .pk3
+	if ( extractedPk3Count > 0 ) {
+		Com_Printf( "Fast-DL: Archive contains %d PK3 package(s). Extracting...\n", extractedPk3Count );
+		unzGoToFirstFile( uf );
+		for ( i = 0; i < gi.number_entry; i++ ) {
+			char filename_inzip[MAX_OSPATH];
+			unz_file_info file_info;
+
+			err = unzGetCurrentFileInfo( uf, &file_info, filename_inzip, sizeof( filename_inzip ), NULL, 0, NULL, 0 );
+			if ( err == UNZ_OK ) {
+				size_t len = strlen( filename_inzip );
+				if ( len > 4 && !Q_stricmp( filename_inzip + len - 4, ".pk3" ) ) {
+					const char *cleanName = COM_SkipPath( filename_inzip );
+					// Security check: verify no path traversal
+					if ( *cleanName && !strstr( cleanName, ".." ) ) {
+						if ( unzOpenCurrentFile( uf ) == UNZ_OK ) {
+							fileHandle_t outF = FS_FOpenFileWrite_HomeData( cleanName );
+							if ( outF ) {
+								char chunk[65536];
+								int readBytes;
+								size_t totalExtracted = 0;
+								const size_t maxFileSize = 1024 * 1024 * 1024; // 1GB safety limit
+
+								while ( ( readBytes = unzReadCurrentFile( uf, chunk, sizeof( chunk ) ) ) > 0 ) {
+									totalExtracted += readBytes;
+									if ( totalExtracted > maxFileSize ) {
+										Com_Printf( "WARNING: Fast-DL file %s exceeds safety limit! Aborting extraction.\n", cleanName );
+										break;
+									}
+									FS_Write( chunk, readBytes, outF );
+								}
+								FS_FCloseFile( outF );
+								Com_Printf( "Fast-DL: Successfully extracted '%s' (%u KB)\n", cleanName, (unsigned int)( totalExtracted / 1024 ) );
+							}
+							unzCloseCurrentFile( uf );
+						}
+					}
+				}
+			}
+			unzGoToNextFile( uf );
+		}
+		unzClose( uf );
+		// Delete the temporary downloaded zip
+		FS_Remove_HomeData( tempName );
+		return qtrue;
+	}
+
+	// If no .pk3 files inside, close zip and rename directly
+	unzClose( uf );
+	FS_Rename_HomeData( tempName, destName, qfalse );
+	return qtrue;
+}
+
+void CL_cURL_BeginDownload( const char *localName, const char *remoteURL, dlSource_t source )
 {
 	CURLMcode result;
 
 	clc.cURLUsed = qtrue;
-	Com_Printf("URL: %s\n", remoteURL);
-	Com_DPrintf("***** CL_cURL_BeginDownload *****\n"
+	clc.downloadSource = source;
+	Com_Printf( "Fast-DL: Fetching %s\nURL: %s\n", localName, remoteURL );
+	Com_DPrintf( "***** CL_cURL_BeginDownload *****\n"
 		"Localname: %s\n"
 		"RemoteURL: %s\n"
-		"****************************\n", localName, remoteURL);
+		"Source: %d\n"
+		"****************************\n", localName, remoteURL, (int)source );
 	CL_cURL_Cleanup();
-	Q_strncpyz(clc.downloadURL, remoteURL, sizeof(clc.downloadURL));
-	Q_strncpyz(clc.downloadName, localName, sizeof(clc.downloadName));
-	Com_sprintf(clc.downloadTempName, sizeof(clc.downloadTempName),
-		"%s.tmp", localName);
+	Q_strncpyz( clc.downloadURL, remoteURL, sizeof( clc.downloadURL ) );
+	Q_strncpyz( clc.downloadName, localName, sizeof( clc.downloadName ) );
+	Com_sprintf( clc.downloadTempName, sizeof( clc.downloadTempName ),
+		"%s.tmp", localName );
 
 	// Set so UI gets access to it
-	Cvar_Set("cl_downloadName", localName);
-	Cvar_Set("cl_downloadSize", "0");
-	Cvar_Set("cl_downloadCount", "0");
-	Cvar_SetValue("cl_downloadTime", cls.realtime);
+	Cvar_Set( "cl_downloadName", localName );
+	Cvar_Set( "cl_downloadSize", "0" );
+	Cvar_Set( "cl_downloadCount", "0" );
+	Cvar_SetValue( "cl_downloadTime", cls.realtime );
 
 	clc.downloadBlock = 0; // Starting new file
 	clc.downloadCount = 0;
 
 	clc.downloadCURL = qcurl_easy_init();
-	if(!clc.downloadCURL) {
-		Com_Error(ERR_DROP, "CL_cURL_BeginDownload: qcurl_easy_init() "
-			"failed");
+	if( !clc.downloadCURL ) {
+		Com_Error( ERR_DROP, "CL_cURL_BeginDownload: qcurl_easy_init() failed" );
 		return;
 	}
-	clc.download = FS_SV_FOpenFileWrite(clc.downloadTempName);
-	if(!clc.download) {
-		Com_Error(ERR_DROP, "CL_cURL_BeginDownload: failed to open "
-			"%s for writing", clc.downloadTempName);
+	clc.download = FS_FOpenFileWrite_HomeData( clc.downloadTempName );
+	if( !clc.download ) {
+		Com_Error( ERR_DROP, "CL_cURL_BeginDownload: failed to open %s for writing", clc.downloadTempName );
 		return;
 	}
 
-	if(com_developer->integer)
-		qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_VERBOSE, 1);
-	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_URL, clc.downloadURL);
-	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_TRANSFERTEXT, 0);
-	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_REFERER, va("ioQ3://%s",
-		NET_AdrToString(clc.serverAddress)));
-	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_USERAGENT, va("%s %s",
-		Q3_VERSION, qcurl_version()));
-	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_WRITEFUNCTION,
-		CL_cURL_CallbackWrite);
-	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_WRITEDATA, &clc.download);
-	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_NOPROGRESS, 0);
-	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_PROGRESSFUNCTION,
-		CL_cURL_CallbackProgress);
-	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_PROGRESSDATA, NULL);
-	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_FAILONERROR, 1);
-	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_FOLLOWLOCATION, 1);
-	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_MAXREDIRS, 5);
-	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_PROTOCOLS,
-		CURLPROTO_HTTP | CURLPROTO_HTTPS | CURLPROTO_FTP | CURLPROTO_FTPS);
-	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_BUFFERSIZE, CURL_MAX_READ_SIZE);
+	if( developer->integer )
+		qcurl_easy_setopt_warn( clc.downloadCURL, CURLOPT_VERBOSE, 1 );
+	qcurl_easy_setopt_warn( clc.downloadCURL, CURLOPT_URL, clc.downloadURL );
+	qcurl_easy_setopt_warn( clc.downloadCURL, CURLOPT_TRANSFERTEXT, 0 );
+	qcurl_easy_setopt_warn( clc.downloadCURL, CURLOPT_REFERER, va( "openmohaa://%s",
+		NET_AdrToString( clc.serverAddress ) ) );
+	qcurl_easy_setopt_warn( clc.downloadCURL, CURLOPT_USERAGENT, va( "OpenMoHAA FastDL %s (%s)",
+		"1.0", qcurl_version() ) );
+	qcurl_easy_setopt_warn( clc.downloadCURL, CURLOPT_WRITEFUNCTION,
+		CL_cURL_CallbackWrite );
+	qcurl_easy_setopt_warn( clc.downloadCURL, CURLOPT_WRITEDATA, &clc.download );
+	qcurl_easy_setopt_warn( clc.downloadCURL, CURLOPT_NOPROGRESS, 0 );
+	qcurl_easy_setopt_warn( clc.downloadCURL, CURLOPT_PROGRESSFUNCTION,
+		CL_cURL_CallbackProgress );
+	qcurl_easy_setopt_warn( clc.downloadCURL, CURLOPT_PROGRESSDATA, NULL );
+	qcurl_easy_setopt_warn( clc.downloadCURL, CURLOPT_FAILONERROR, 1 );
+	qcurl_easy_setopt_warn( clc.downloadCURL, CURLOPT_FOLLOWLOCATION, 1 );
+	qcurl_easy_setopt_warn( clc.downloadCURL, CURLOPT_MAXREDIRS, 5 );
+	qcurl_easy_setopt_warn( clc.downloadCURL, CURLOPT_PROTOCOLS,
+		CURLPROTO_HTTP | CURLPROTO_HTTPS | CURLPROTO_FTP | CURLPROTO_FTPS );
+	qcurl_easy_setopt_warn( clc.downloadCURL, CURLOPT_BUFFERSIZE, CURL_MAX_READ_SIZE );
 	clc.downloadCURLM = qcurl_multi_init();	
-	if(!clc.downloadCURLM) {
-		qcurl_easy_cleanup(clc.downloadCURL);
+	if( !clc.downloadCURLM ) {
+		qcurl_easy_cleanup( clc.downloadCURL );
 		clc.downloadCURL = NULL;
-		Com_Error(ERR_DROP, "CL_cURL_BeginDownload: qcurl_multi_init() "
-			"failed");
+		Com_Error( ERR_DROP, "CL_cURL_BeginDownload: qcurl_multi_init() failed" );
 		return;
 	}
-	result = qcurl_multi_add_handle(clc.downloadCURLM, clc.downloadCURL);
-	if(result != CURLM_OK) {
-		qcurl_easy_cleanup(clc.downloadCURL);
+	result = qcurl_multi_add_handle( clc.downloadCURLM, clc.downloadCURL );
+	if( result != CURLM_OK ) {
+		qcurl_easy_cleanup( clc.downloadCURL );
 		clc.downloadCURL = NULL;
-		Com_Error(ERR_DROP,"CL_cURL_BeginDownload: qcurl_multi_add_handle() failed: %s", qcurl_multi_strerror(result));
+		Com_Error( ERR_DROP, "CL_cURL_BeginDownload: qcurl_multi_add_handle() failed: %s", qcurl_multi_strerror( result ) );
 		return;
 	}
 
-	if(!(clc.sv_allowDownload & DLF_NO_DISCONNECT) &&
-		!clc.cURLDisconnected) {
+	if( !( clc.sv_allowDownload & DLF_NO_DISCONNECT ) &&
+		!clc.cURLDisconnected && clc.state >= CA_CONNECTED ) {
 
-		CL_AddReliableCommand("disconnect", qtrue);
+		CL_AddReliableCommand( "disconnect", qtrue );
 		CL_WritePacket();
 		CL_WritePacket();
 		CL_WritePacket();
@@ -329,39 +446,112 @@ void CL_cURL_BeginDownload( const char *localName, const char *remoteURL )
 	}
 }
 
+void CL_FastDL_BeginDownload( const char *localName, const char *remoteName )
+{
+	char url[MAX_CVAR_VALUE_STRING + MAX_OSPATH + 32];
+	char fastDlClean[MAX_CVAR_VALUE_STRING];
+	const char *fastDlBase = cl_fastdl_url ? cl_fastdl_url->string : NULL;
+
+	if( !fastDlBase || !*fastDlBase ) {
+		fastDlBase = "https://api.powellslocker.com/api/v1/fastdl";
+	}
+
+	while ( *fastDlBase == ' ' || *fastDlBase == '\"' || *fastDlBase == '\'' ) {
+		fastDlBase++;
+	}
+	Q_strncpyz( fastDlClean, fastDlBase, sizeof( fastDlClean ) );
+	size_t len = strlen( fastDlClean );
+	while ( len > 0 && ( fastDlClean[len - 1] == ' ' || fastDlClean[len - 1] == '\"' || fastDlClean[len - 1] == '\'' ) ) {
+		fastDlClean[--len] = '\0';
+	}
+
+	if ( len == 0 || Q_stricmpn( fastDlClean, "http", 4 ) || !strstr( fastDlClean, "://" ) || strlen( strstr( fastDlClean, "://" ) + 3 ) < 1 ) {
+		Q_strncpyz( fastDlClean, "https://api.powellslocker.com/api/v1/fastdl", sizeof( fastDlClean ) );
+		len = strlen( fastDlClean );
+	}
+
+	if( fastDlClean[len - 1] == '/' ) {
+		Com_sprintf( url, sizeof( url ), "%s%s", fastDlClean, remoteName );
+	} else {
+		Com_sprintf( url, sizeof( url ), "%s/%s", fastDlClean, remoteName );
+	}
+
+	CL_cURL_BeginDownload( localName, url, DL_SOURCE_FASTDL );
+}
+
 void CL_cURL_PerformDownload(void)
 {
 	CURLMcode res;
 	CURLMsg *msg;
-	int c;
+	int c = 0;
+	int msgs_left = 0;
 	int i = 0;
 
-	res = qcurl_multi_perform(clc.downloadCURLM, &c);
-	while(res == CURLM_CALL_MULTI_PERFORM && i < 100) {
-		res = qcurl_multi_perform(clc.downloadCURLM, &c);
+	if ( !clc.downloadCURLM ) {
+		return;
+	}
+
+	res = qcurl_multi_perform( clc.downloadCURLM, &c );
+	while( res == CURLM_CALL_MULTI_PERFORM && i < 100 ) {
+		res = qcurl_multi_perform( clc.downloadCURLM, &c );
 		i++;
 	}
-	if(res == CURLM_CALL_MULTI_PERFORM)
+	if( res == CURLM_CALL_MULTI_PERFORM )
 		return;
-	msg = qcurl_multi_info_read(clc.downloadCURLM, &c);
-	if(msg == NULL) {
+
+	msg = qcurl_multi_info_read( clc.downloadCURLM, &msgs_left );
+	if( msg == NULL || msg->msg != CURLMSG_DONE ) {
 		return;
 	}
-	FS_FCloseFile(clc.download);
-	if(msg->msg == CURLMSG_DONE && msg->data.result == CURLE_OK) {
-		FS_SV_Rename(clc.downloadTempName, clc.downloadName, qfalse);
+
+	if ( clc.download ) {
+		FS_FCloseFile( clc.download );
+		clc.download = 0;
+	}
+
+	if( msg->data.result == CURLE_OK ) {
+		CL_ProcessDownloadedFile( clc.downloadTempName, clc.downloadName );
 		clc.downloadRestart = qtrue;
+		if( clc.state == CA_DISCONNECTED ) {
+			CL_cURL_Cleanup();
+			FS_Restart( clc.checksumFeed );
+			Com_Printf( "\n^2Fast-DL: Package '%s' downloaded and indexed successfully!^7\n", clc.downloadName );
+		} else {
+			CL_NextDownload();
+		}
 	}
 	else {
-		long code;
+		long code = 0;
+		if ( msg->easy_handle ) {
+			qcurl_easy_getinfo( msg->easy_handle, CURLINFO_RESPONSE_CODE, &code );
+		}
 
-		qcurl_easy_getinfo(msg->easy_handle, CURLINFO_RESPONSE_CODE,
-			&code);	
-		Com_Error(ERR_DROP, "Download Error: %s Code: %ld URL: %s",
-			qcurl_easy_strerror(msg->data.result),
-			code, clc.downloadURL);
+		// Fallback 1: If server sv_dlURL failed, attempt MOH-DB Fast-DL
+		if( clc.downloadSource == DL_SOURCE_SERVER_HTTP && cl_fastdl && cl_fastdl->integer > 0 ) {
+			Com_Printf( "Server HTTP download failed for '%s' (HTTP %ld / %s). Attempting MOH-DB Fast-DL...\n",
+				clc.downloadRemoteName, code, qcurl_easy_strerror( msg->data.result ) );
+			FS_Remove_HomeData( clc.downloadTempName );
+			CL_cURL_Cleanup();
+			CL_FastDL_BeginDownload( clc.downloadName, clc.downloadRemoteName );
+			return;
+		}
+
+		// Fallback 2: If MOH-DB Fast-DL failed, fallback to UDP ONLY IF explicitly allowed
+		if( clc.downloadSource == DL_SOURCE_FASTDL && ( cl_allowDownload->integer & DLF_ENABLE ) && !( cl_allowDownload->integer & DLF_NO_UDP ) && cl_fastdl->integer < 2 ) {
+			Com_Printf( "Fast-DL package '%s' not found on MOH-DB (HTTP %ld). Falling back to UDP download...\n",
+				clc.downloadRemoteName, code );
+			FS_Remove_HomeData( clc.downloadTempName );
+			CL_cURL_Cleanup();
+			clc.downloadSource = DL_SOURCE_UDP;
+			CL_BeginDownload( clc.downloadName, clc.downloadRemoteName );
+			return;
+		}
+
+		// If all sources failed or UDP is disabled
+		FS_Remove_HomeData( clc.downloadTempName );
+		Com_Error( ERR_DROP, "Download Error: '%s' could not be downloaded (HTTP %ld: %s).\nYou can download it manually from https://moh-db.com",
+			clc.downloadRemoteName, code, qcurl_easy_strerror( msg->data.result ) );
 	}
-
-	CL_NextDownload();
 }
 #endif /* USE_CURL */
+

@@ -979,6 +979,35 @@ void FS_BaseDir_Rename_HomeData( const char *from, const char *to, qboolean safe
 }
 
 /*
+===========
+FS_Rename_HomeData
+===========
+*/
+void FS_Rename_HomeData( const char *from, const char *to, qboolean safe ) {
+	char			*from_ospath, *to_ospath;
+
+	if ( !fs_searchpaths ) {
+		Com_Error( ERR_FATAL, "Filesystem call made without initialization\n" );
+	}
+
+	// don't let sound stutter
+	S_ClearSoundBuffer();
+
+	from_ospath = FS_BuildOSPath( fs_homedatapath->string, fs_gamedir, from );
+	to_ospath = FS_BuildOSPath( fs_homedatapath->string, fs_gamedir, to );
+
+	if ( fs_debug->integer ) {
+		Com_Printf( "FS_Rename_HomeData: %s --> %s\n", from_ospath, to_ospath );
+	}
+
+	if ( safe ) {
+		FS_CheckFilenameIsMutable( to_ospath, __func__ );
+	}
+
+	rename(from_ospath, to_ospath);
+}
+
+/*
 ==============
 FS_FCloseFile
 
@@ -1883,6 +1912,199 @@ int	FS_FileIsInPAK(const char *filename, int *pChecksum ) {
 		}
 	}
 	return -1;
+}
+
+/*
+=================
+FS_FileExistsAnyPak
+
+Checks if a file exists in ANY loaded pk3 or directory without pure restriction
+=================
+*/
+qboolean FS_FileExistsAnyPak( const char *filename ) {
+	searchpath_t	*search;
+	pack_t			*pak;
+	fileInPack_t	*pakFile;
+	long			hash = 0;
+
+	if ( !fs_searchpaths || !filename || !filename[0] ) {
+		return qfalse;
+	}
+
+	if ( filename[0] == '/' || filename[0] == '\\' ) {
+		filename++;
+	}
+
+	if ( strstr( filename, ".." ) || strstr( filename, "::" ) ) {
+		return qfalse;
+	}
+
+	for ( search = fs_searchpaths ; search ; search = search->next ) {
+		if ( search->pack ) {
+			pak = search->pack;
+			hash = FS_HashFileName( filename, pak->hashSize );
+			if ( pak->hashTable[hash] ) {
+				pakFile = pak->hashTable[hash];
+				do {
+					if ( !FS_FilenameCompare( pakFile->name, filename ) ) {
+						return qtrue;
+					}
+					pakFile = pakFile->next;
+				} while ( pakFile != NULL );
+			}
+		} else if ( search->dir ) {
+			char *netpath = FS_BuildOSPath( search->dir->path, search->dir->gamedir, filename );
+			FILE *fp = Sys_FOpen( netpath, "rb" );
+			if ( fp ) {
+				fclose( fp );
+				return qtrue;
+			}
+		}
+	}
+	return qfalse;
+}
+
+/*
+=================
+FS_MapExists
+
+Comprehensive check for whether a map BSP exists in ANY loaded pk3 or directory.
+Handles all game modes and expansions (AA, Spearhead, Breakthrough: dm, obj, lib, push, tow, round)
+and matches substring variants (e.g. user_98foucarville.bsp for foucarville, sw_dm_gatehouse_assault.bsp, etc.)
+=================
+*/
+qboolean FS_MapExists( const char *mapname ) {
+	if ( !mapname || !*mapname || !fs_searchpaths ) {
+		return qtrue;
+	}
+
+	const char *baseName = COM_SkipPath( mapname );
+
+	// 1. Direct path probes
+	const char *probes[] = {
+		va( "maps/%s.bsp", mapname ),
+		va( "maps/%s.bsp", baseName ),
+		va( "%s.bsp", mapname ),
+		va( "%s.bsp", baseName ),
+		va( "maps/dm/%s.bsp", baseName ),
+		va( "maps/obj/%s.bsp", baseName ),
+		va( "maps/lib/%s.bsp", baseName ),
+		va( "maps/push/%s.bsp", baseName ),
+		va( "maps/tow/%s.bsp", baseName ),
+		va( "maps/round/%s.bsp", baseName ),
+		va( "maps/dm/sw_dm_%s.bsp", baseName ),
+		va( "maps/obj/sw_obj_%s.bsp", baseName ),
+		va( "maps/sw_%s.bsp", baseName ),
+		va( "maps/sh_%s.bsp", baseName ),
+		va( "maps/dm/bt_dm_%s.bsp", baseName ),
+		va( "maps/obj/bt_obj_%s.bsp", baseName ),
+		va( "maps/lib/bt_lib_%s.bsp", baseName ),
+		va( "maps/push/bt_push_%s.bsp", baseName ),
+		va( "maps/tow/bt_tow_%s.bsp", baseName ),
+		va( "maps/round/bt_round_%s.bsp", baseName ),
+		va( "maps/bt_%s.bsp", baseName ),
+		va( "maps/tt_%s.bsp", baseName )
+	};
+
+	for ( size_t i = 0; i < sizeof( probes ) / sizeof( probes[0] ); i++ ) {
+		if ( FS_FileExistsAnyPak( probes[i] ) ) {
+			return qtrue;
+		}
+	}
+
+	// 2. Scan all packfiles for any BSP file matching the map baseName
+	for ( searchpath_t *search = fs_searchpaths; search; search = search->next ) {
+		if ( search->pack && search->pack->hashTable ) {
+			for ( int i = 0; i < search->pack->hashSize; i++ ) {
+				for ( fileInPack_t *pakFile = search->pack->hashTable[i]; pakFile; pakFile = pakFile->next ) {
+					if ( strstr( pakFile->name, ".bsp" ) ) {
+						if ( Q_stristr( pakFile->name, baseName ) ) {
+							return qtrue;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return qfalse;
+}
+
+/*
+=================
+FS_ResolveMapPath
+
+Resolves a map path (e.g. "maps/dm/foucarville.bsp") to the actual BSP file path
+inside loaded pk3s if prefixed or named differently (e.g. "maps/dm/user_98foucarville.bsp").
+=================
+*/
+qboolean FS_ResolveMapPath( const char *name, char *outPath, size_t outPathSize ) {
+	if ( !name || !name[0] || !outPath || outPathSize == 0 ) {
+		return qfalse;
+	}
+
+	// 1. If exact file exists, use it
+	if ( FS_FileExistsAnyPak( name ) ) {
+		Q_strncpyz( outPath, name, outPathSize );
+		return qtrue;
+	}
+
+	char cleanName[MAX_QPATH];
+	COM_StripExtension( name, cleanName, sizeof( cleanName ) );
+	const char *baseName = COM_SkipPath( cleanName );
+
+	// 2. Direct probe list
+	const char *probes[] = {
+		va( "maps/%s.bsp", cleanName ),
+		va( "maps/%s.bsp", baseName ),
+		va( "%s.bsp", cleanName ),
+		va( "%s.bsp", baseName ),
+		va( "maps/dm/%s.bsp", baseName ),
+		va( "maps/obj/%s.bsp", baseName ),
+		va( "maps/lib/%s.bsp", baseName ),
+		va( "maps/push/%s.bsp", baseName ),
+		va( "maps/tow/%s.bsp", baseName ),
+		va( "maps/round/%s.bsp", baseName ),
+		va( "maps/dm/sw_dm_%s.bsp", baseName ),
+		va( "maps/obj/sw_obj_%s.bsp", baseName ),
+		va( "maps/sw_%s.bsp", baseName ),
+		va( "maps/sh_%s.bsp", baseName ),
+		va( "maps/dm/bt_dm_%s.bsp", baseName ),
+		va( "maps/obj/bt_obj_%s.bsp", baseName ),
+		va( "maps/lib/bt_lib_%s.bsp", baseName ),
+		va( "maps/push/bt_push_%s.bsp", baseName ),
+		va( "maps/tow/bt_tow_%s.bsp", baseName ),
+		va( "maps/round/bt_round_%s.bsp", baseName ),
+		va( "maps/bt_%s.bsp", baseName ),
+		va( "maps/tt_%s.bsp", baseName )
+	};
+
+	for ( size_t i = 0; i < sizeof( probes ) / sizeof( probes[0] ); i++ ) {
+		if ( FS_FileExistsAnyPak( probes[i] ) ) {
+			Q_strncpyz( outPath, probes[i], outPathSize );
+			return qtrue;
+		}
+	}
+
+	// 3. Scan loaded pk3s for any BSP file matching the map baseName
+	for ( searchpath_t *search = fs_searchpaths; search; search = search->next ) {
+		if ( search->pack && search->pack->hashTable ) {
+			for ( int i = 0; i < search->pack->hashSize; i++ ) {
+				for ( fileInPack_t *pakFile = search->pack->hashTable[i]; pakFile; pakFile = pakFile->next ) {
+					if ( strstr( pakFile->name, ".bsp" ) ) {
+						if ( Q_stristr( pakFile->name, baseName ) ) {
+							Q_strncpyz( outPath, pakFile->name, outPathSize );
+							Com_Printf( "FS_ResolveMapPath: Resolved '%s' -> '%s'\n", name, outPath );
+							return qtrue;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	Q_strncpyz( outPath, name, outPathSize );
+	return qfalse;
 }
 
 /*
@@ -3236,6 +3458,64 @@ void FS_AddGameDirectory(const char *path, const char *dir) {
 
 	search->next = fs_searchpaths;
 	fs_searchpaths = search;
+}
+
+/*
+================
+FS_AddPakFile
+
+Hot-mounts a single .pk3 file directly into fs_searchpaths at runtime.
+================
+*/
+qboolean FS_AddPakFile( const char *pakfile, const char *dir ) {
+	pack_t			*pak;
+	searchpath_t	*search;
+	const char		*basename;
+	char			pakPathname[MAX_OSPATH];
+
+	if ( !pakfile || !pakfile[0] ) {
+		return qfalse;
+	}
+
+	// Check if already mounted
+	basename = COM_SkipPath( pakfile );
+	for ( search = fs_searchpaths; search; search = search->next ) {
+		if ( search->pack && !Q_stricmp( search->pack->pakFilename, pakfile ) ) {
+			return qtrue; // already loaded
+		}
+	}
+
+	pak = FS_LoadZipFile( pakfile, basename );
+	if ( !pak ) {
+		return qfalse;
+	}
+
+	// Extract path without file name
+	Q_strncpyz( pakPathname, pakfile, sizeof( pakPathname ) );
+	for ( int i = (int)strlen( pakPathname ) - 1; i >= 0; i-- ) {
+		if ( pakPathname[i] == '/' || pakPathname[i] == '\\' ) {
+			pakPathname[i] = '\0';
+			break;
+		}
+	}
+	Q_strncpyz( pak->pakPathname, pakPathname, sizeof( pak->pakPathname ) );
+
+	if ( dir && dir[0] ) {
+		Q_strncpyz( pak->pakGamename, dir, sizeof( pak->pakGamename ) );
+	} else {
+		Q_strncpyz( pak->pakGamename, fs_gamedir, sizeof( pak->pakGamename ) );
+	}
+
+	fs_packFiles += pak->numfiles;
+
+	search = (searchpath_t *)Z_Malloc( sizeof( searchpath_t ) );
+	search->pack = pak;
+	search->dir = NULL;
+	search->next = fs_searchpaths;
+	fs_searchpaths = search;
+
+	Com_Printf( "Mounted PK3: %s (%d files)\n", pakfile, pak->numfiles );
+	return qtrue;
 }
 
 /*

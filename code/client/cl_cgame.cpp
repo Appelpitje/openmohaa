@@ -472,9 +472,24 @@ Just adds default parameters that cgame doesn't need to know about
 ====================
 */
 void CL_CM_LoadMap( const char *mapname, int *checksum ) {
-	CM_LoadMap( mapname, qtrue, checksum );
+	char resolvedName[MAX_QPATH];
+	FS_ResolveMapPath( mapname, resolvedName, sizeof( resolvedName ) );
+	CM_LoadMap( resolvedName, qtrue, checksum );
 	// prepare world vis data
 	re.SetWorldVisData(CM_VisibilityPointer());
+}
+
+/*
+====================
+CL_R_LoadWorldMap
+
+Resolves the map name to internal pk3 BSP if prefixed before loading renderer world
+====================
+*/
+void CL_R_LoadWorldMap( const char *mapname ) {
+	char resolvedName[MAX_QPATH];
+	FS_ResolveMapPath( mapname, resolvedName, sizeof( resolvedName ) );
+	re.LoadWorld( resolvedName );
 }
 
 /*
@@ -714,7 +729,7 @@ void CL_InitCGameDLL( clientGameImport_t *cgi, clientGameExport_t **cge ) {
 	cgi->R_ClearScene				= re.ClearScene;
 	cgi->R_RenderScene				= re.RenderScene;
 
-	cgi->R_LoadWorldMap				= re.LoadWorld;
+	cgi->R_LoadWorldMap				= CL_R_LoadWorldMap;
 	cgi->R_PrintBSPFileSizes		= re.PrintBSPFileSizes;
 	cgi->R_MapVersion				= re.MapVersion;
 	cgi->R_RegisterModel			= re.RegisterModel;

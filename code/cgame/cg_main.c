@@ -655,7 +655,12 @@ void CG_GameStateReceived(void)
     // load the new map
     cgi.CM_LoadMap(cgs.mapname, &checksum);
     if (cgs.useMapChecksum && checksum != cgs.mapChecksum && cgs.gametype != GT_SINGLE_PLAYER) {
-        cgi.Error(ERR_DROP, "Client/Server map checksum mismatch: %x/%x", checksum, cgs.mapChecksum);
+        cvar_t *ignoreChecksum = cgi.Cvar_Get("cg_ignoreMapChecksum", "1", CVAR_ARCHIVE);
+        if (!ignoreChecksum || !ignoreChecksum->integer) {
+            cgi.Error(ERR_DROP, "Client/Server map checksum mismatch: %x/%x", checksum, cgs.mapChecksum);
+        } else {
+            cgi.Printf(S_COLOR_YELLOW "WARNING: Client/Server map checksum mismatch: %x/%x (connecting anyway)\n", checksum, cgs.mapChecksum);
+        }
     }
 
     CG_InitMarks();

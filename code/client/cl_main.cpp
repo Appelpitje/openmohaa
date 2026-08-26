@@ -123,6 +123,9 @@ cvar_t	*cl_guidServerUniq;
 
 cvar_t	*wombat;
 
+cvar_t	*cl_fastdl;
+cvar_t	*cl_fastdl_url;
+
 cvar_t	*cl_r_fullscreen;
 
 cvar_t	*cl_consoleKeys;
@@ -1290,8 +1293,47 @@ void CL_Disconnect_f( void ) {
 	} else {
 		UI_CloseConsole();
 	}
-}
+/*
+================
+CL_FastDlCommand_f
+================
+*/
+void CL_FastDlCommand_f( void ) {
+#ifdef USE_CURL
+	char localName[MAX_OSPATH];
+	char remoteName[MAX_OSPATH];
 
+	if ( Cmd_Argc() < 2 ) {
+		Com_Printf( "Usage: fastdl <map_or_package_name>\n" );
+		Com_Printf( "Example: fastdl dm_rockbound\n" );
+		Com_Printf( "Current Fast-DL URL: %s\n", cl_fastdl_url ? cl_fastdl_url->string : "not set" );
+		return;
+	}
+
+	const char *arg = Cmd_Argv( 1 );
+	size_t len = strlen( arg );
+
+	if ( len > 4 && ( !Q_stricmp( arg + len - 4, ".pk3" ) || !Q_stricmp( arg + len - 4, ".zip" ) ) ) {
+		Q_strncpyz( remoteName, arg, sizeof( remoteName ) );
+		Q_strncpyz( localName, arg, sizeof( localName ) );
+	} else {
+		Com_sprintf( remoteName, sizeof( remoteName ), "%s.pk3", arg );
+		Com_sprintf( localName, sizeof( localName ), "%s.pk3", arg );
+	}
+
+	Com_Printf( "Fast-DL: Initiating download for '%s' from %s...\n", remoteName, cl_fastdl_url ? cl_fastdl_url->string : "" );
+	Q_strncpyz( clc.downloadRemoteName, remoteName, sizeof( clc.downloadRemoteName ) );
+
+	if ( !CL_cURL_Init() ) {
+		Com_Printf( "Fast-DL Error: Could not initialize cURL library.\n" );
+		return;
+	}
+
+	CL_FastDL_BeginDownload( localName, remoteName );
+#else
+	Com_Printf( "Fast-DL is disabled in this build (no cURL support).\n" );
+#endif
+}
 
 /*
 ================
@@ -1920,34 +1962,25 @@ void CL_NextDownload(void) {
 			*s++ = 0;
 		else
 			s = localName + strlen(localName); // point at the nul byte
+		Q_strncpyz( clc.downloadRemoteName, remoteName, sizeof( clc.downloadRemoteName ) );
+
 #ifdef USE_CURL
-		if(!(cl_allowDownload->integer & DLF_NO_REDIRECT)) {
-			if(clc.sv_allowDownload & DLF_NO_REDIRECT) {
-				Com_Printf("WARNING: server does not "
-					"allow download redirection "
-					"(sv_allowDownload is %d)\n",
-					clc.sv_allowDownload);
-			}
-			else if(!*clc.sv_dlURL) {
-				Com_Printf("WARNING: server allows "
-					"download redirection, but does not "
-					"have sv_dlURL set\n");
-			}
-			else if(!CL_cURL_Init()) {
-				Com_Printf("WARNING: could not load "
-					"cURL library\n");
-			}
-			else {
-				CL_cURL_BeginDownload(localName, va("%s/%s",
-					clc.sv_dlURL, remoteName));
+		if ( CL_cURL_Init() ) {
+			// Mode 2: Aggressive FastDL (Always prioritize MOH-DB CDN first)
+			if ( cl_fastdl && cl_fastdl->integer == 2 ) {
+				CL_FastDL_BeginDownload( localName, remoteName );
 				useCURL = qtrue;
 			}
-		}
-		else if(!(clc.sv_allowDownload & DLF_NO_REDIRECT)) {
-			Com_Printf("WARNING: server allows download "
-				"redirection, but it disabled by client "
-				"configuration (cl_allowDownload is %d)\n",
-				cl_allowDownload->integer);
+			// Mode 1: Server sv_dlURL first ONLY IF it starts with http:// or https://
+			else if ( !( cl_allowDownload->integer & DLF_NO_REDIRECT ) && !( clc.sv_allowDownload & DLF_NO_REDIRECT ) && *clc.sv_dlURL && ( !Q_stricmpn( clc.sv_dlURL, "http://", 7 ) || !Q_stricmpn( clc.sv_dlURL, "https://", 8 ) ) ) {
+				CL_cURL_BeginDownload( localName, va( "%s/%s", clc.sv_dlURL, remoteName ), DL_SOURCE_SERVER_HTTP );
+				useCURL = qtrue;
+			}
+			// If server has no valid sv_dlURL or redirect is disabled on server, use MOH-DB FastDL if cl_fastdl is enabled
+			else if ( cl_fastdl && cl_fastdl->integer >= 1 ) {
+				CL_FastDL_BeginDownload( localName, remoteName );
+				useCURL = qtrue;
+			}
 		}
 #endif /* USE_CURL */
 		if(!useCURL) {
@@ -1982,32 +2015,47 @@ and determine if we need to download them
 =================
 */
 void CL_InitDownloads(void) {
-  char missingfiles[1024];
+	char missingfiles[1024];
 
-  if ( !(cl_allowDownload->integer & DLF_ENABLE) )
-  {
-    // autodownload is disabled on the client
-    // but it's possible that some referenced files on the server are missing
-    if (FS_ComparePaks( missingfiles, sizeof( missingfiles ), qfalse ) )
-    {
-      // NOTE TTimo I would rather have that printed as a modal message box
-      //   but at this point while joining the game we don't know whether we will successfully join or not
-      Com_Printf( "\nWARNING: You are missing some files referenced by the server:\n%s"
-                  "You might not be able to join the game\n"
-                  "Go to the setting menu to turn on autodownload, or get the file elsewhere\n\n", missingfiles );
-    }
-  }
-  else if ( FS_ComparePaks( clc.downloadList, sizeof( clc.downloadList ) , qtrue ) ) {
-
-    Com_Printf("Need paks: %s\n", clc.downloadList );
-
-		if ( *clc.downloadList ) {
-			// if autodownloading is not enabled on the server
-			clc.state = CA_CONNECTED;
-			CL_NextDownload();
-			return;
+	if ( !(cl_allowDownload->integer & DLF_ENABLE) && (!cl_fastdl || !cl_fastdl->integer) )
+	{
+		// autodownload is disabled on the client
+		if (FS_ComparePaks( missingfiles, sizeof( missingfiles ), qfalse ) )
+		{
+			Com_Printf( "\nWARNING: You are missing some files referenced by the server:\n%s"
+						"You might not be able to join the game\n"
+						"Go to the setting menu to turn on autodownload, or get the file elsewhere\n\n", missingfiles );
 		}
+	}
+	else if ( FS_ComparePaks( clc.downloadList, sizeof( clc.downloadList ) , qtrue ) && *clc.downloadList ) {
+		Com_Printf("Need paks: %s\n", clc.downloadList );
+		clc.state = CA_CONNECTED;
+		CL_NextDownload();
+		return;
+	}
 
+	// If server didn't specify pak list or referenced paks matched, check if map is missing locally
+	if ( cl_fastdl && cl_fastdl->integer > 0 ) {
+		const char *info = cl.gameState.stringData + cl.gameState.stringOffsets[CS_SERVERINFO];
+		const char *mapname = Info_ValueForKey( info, "mapname" );
+
+		if ( mapname && *mapname ) {
+			const char *baseName = COM_SkipPath( mapname );
+			char pk3Name[MAX_QPATH];
+			Com_sprintf( pk3Name, sizeof( pk3Name ), "%s.pk3", baseName );
+
+			// Check if map BSP exists in any loaded pk3 OR if the package is already downloaded on disk
+			if ( !FS_MapExists( mapname ) && !FS_FileExists_HomeData( pk3Name ) ) {
+				if ( !clc.fastDlMapAttempted ) {
+					clc.fastDlMapAttempted = qtrue;
+					Com_Printf( "Fast-DL: Server map '%s' is missing locally. Fetching via Fast-DL...\n", mapname );
+					Com_sprintf( clc.downloadList, sizeof( clc.downloadList ), "@%s.pk3@%s.pk3", baseName, baseName );
+					clc.state = CA_CONNECTED;
+					CL_NextDownload();
+					return;
+				}
+			}
+		}
 	}
 
 	CL_DownloadsComplete();
@@ -3621,7 +3669,9 @@ void CL_Init( void ) {
 
 	cl_showMouseRate = Cvar_Get ("cl_showmouserate", "0", 0);
 
-	cl_allowDownload = Cvar_Get ("cl_allowDownload", "0", CVAR_ARCHIVE);
+	cl_allowDownload = Cvar_Get ("cl_allowDownload", "1", CVAR_ARCHIVE);
+	cl_fastdl = Cvar_Get ("cl_fastdl", "1", CVAR_ARCHIVE);
+	cl_fastdl_url = Cvar_Get ("cl_fastdl_url", "https://api.powellslocker.com/api/v1/fastdl", CVAR_ARCHIVE);
 #ifdef USE_CURL
 	cl_cURLLib = Cvar_Get("cl_cURLLib", DEFAULT_CURL_LIB, CVAR_ARCHIVE);
 #endif
@@ -3742,6 +3792,9 @@ void CL_Init( void ) {
 	Cmd_AddCommand ("fs_referencedList", CL_ReferencedPK3List_f );
 	Cmd_AddCommand ("video", CL_Video_f );
 	Cmd_AddCommand ("stopvideo", CL_StopVideo_f );
+	Cmd_AddCommand ("fastdl", CL_FastDlCommand_f );
+	Cmd_AddCommand ("getmap", CL_FastDlCommand_f );
+	Cmd_AddCommand ("getmod", CL_FastDlCommand_f );
 	CL_InitConsoleCommands();
 	CL_InitRef();
 	CL_StartHunkUsers(qfalse);
@@ -3833,6 +3886,9 @@ void CL_Shutdown(const char* finalmsg, qboolean disconnect, qboolean quit) {
 	Cmd_RemoveCommand ("model");
 	Cmd_RemoveCommand ("video");
 	Cmd_RemoveCommand ("stopvideo");
+	Cmd_RemoveCommand ("fastdl");
+	Cmd_RemoveCommand ("getmap");
+	Cmd_RemoveCommand ("getmod");
 
 	CL_ShutdownInput();
 

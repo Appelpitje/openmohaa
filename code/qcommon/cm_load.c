@@ -873,7 +873,9 @@ void CM_LoadMap( const char *name, qboolean clientload, int *checksum ) {
 	// load the file
 	//
 #ifndef BSPC
-	length = FS_FOpenFileRead( name, &h, qtrue, qtrue );
+	char resolvedName[MAX_QPATH];
+	FS_ResolveMapPath( name, resolvedName, sizeof( resolvedName ) );
+	length = FS_FOpenFileRead( resolvedName, &h, qtrue, qtrue );
 #else
 	length = LoadQuakeFile((quakefile_t *) name, (void **)&buf);
 #endif
