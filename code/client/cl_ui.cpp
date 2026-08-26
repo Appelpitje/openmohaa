@@ -5528,6 +5528,7 @@ static unsigned int  updateTime = 0;
 static unsigned int  loadNumber;
 static unsigned int  totalLoadTime;
 static unsigned int  currentLoadTime;
+static unsigned int  currentLoadCount;
 
 static char        **loadStrings;
 static unsigned int *loadTimes;
@@ -5728,9 +5729,19 @@ void UI_LoadResource(const char *name)
         UI_EndLoadResource();
         UI_EndLoadResource(name);
         UI_BeginLoadResource();
+
+        currentLoadCount++;
+        // Smooth asymptotic progress curve for maps without .min
+        float progress = 1.0f - expf( - (float)currentLoadCount / 220.0f );
+        if (progress > 0.95f) {
+            progress = 0.95f;
+        }
+        Cvar_SetValue("loadingbar", progress);
     } else if (cls.loading == LOAD_PROGRESS_LOAD) {
         UI_RegisterLoadResource(name);
-        Cvar_SetValue("loadingbar", (float)currentLoadTime / (float)totalLoadTime);
+        if (totalLoadTime > 0) {
+            Cvar_SetValue("loadingbar", (float)currentLoadTime / (float)totalLoadTime);
+        }
     }
 
     UI_TestUpdateScreen(33);
@@ -5879,9 +5890,23 @@ void UI_BeginLoad(const char *pszMapName)
     server_loading_waiting = qfalse;
     strcpy(server_mapname, pszMapName);
 
-    if (str::icmp(ui_sCurrentLoadingMenu, server_mapname)) {
-        ui_sCurrentLoadingMenu = server_mapname;
-        ui_pLoadingMenu        = menuManager.FindMenu(ui_sCurrentLoadingMenu);
+    // Try finding the exact menu first
+    ui_sCurrentLoadingMenu = server_mapname;
+    ui_pLoadingMenu        = menuManager.FindMenu(ui_sCurrentLoadingMenu);
+
+    // If not found, probe game-mode and prefix variations (e.g. obj/mp_berlin_tow, dm/mp_bahnhof_dm, lib/mp_anzio_lib)
+    if (!ui_pLoadingMenu) {
+        const char *baseName = COM_SkipPath(pszMapName);
+        const char *prefixes[] = { "obj/", "dm/", "lib/", "tow/", "round/", "sw_", "bt_", "tt_", "loading_", "" };
+        for (size_t i = 0; i < sizeof(prefixes)/sizeof(prefixes[0]); i++) {
+            str candidate = prefixes[i];
+            candidate += baseName;
+            ui_pLoadingMenu = menuManager.FindMenu(candidate);
+            if (ui_pLoadingMenu) {
+                ui_sCurrentLoadingMenu = candidate;
+                break;
+            }
+        }
     }
 
     if (!ui_pLoadingMenu) {
@@ -5917,22 +5942,16 @@ void UI_BeginLoad(const char *pszMapName)
             cls.loading = LOAD_PROGRESS_SAVE;
         }
 
-        if (cls.loading == LOAD_PROGRESS_LOAD) {
-            ui_pLoadingMenu->PassEventToWidget("loadingflasher", new Event(EV_Widget_Disable));
-            ui_pLoadingMenu->PassEventToWidget("loadingbar", new Event(EV_Widget_Enable));
-            ui_pLoadingMenu->PassEventToWidget("loadingbar_border", new Event(EV_Widget_Enable));
+        // Always enable the loading progress bar and border, and disable the blinking flasher widget
+        ui_pLoadingMenu->PassEventToWidget("loadingflasher", new Event(EV_Widget_Disable));
+        ui_pLoadingMenu->PassEventToWidget("loadingbar", new Event(EV_Widget_Enable));
+        ui_pLoadingMenu->PassEventToWidget("loadingbar_border", new Event(EV_Widget_Enable));
 
-            currentLoadTime = 0;
-        } else {
-            ui_pLoadingMenu->PassEventToWidget("loadingflasher", new Event(EV_Widget_Enable));
-            ui_pLoadingMenu->PassEventToWidget("loadingbar", new Event(EV_Widget_Disable));
-            ui_pLoadingMenu->PassEventToWidget("loadingbar_border", new Event(EV_Widget_Disable));
+        currentLoadTime  = 0;
+        currentLoadCount = 0;
 
+        if (cls.loading == LOAD_PROGRESS_SAVE) {
             UI_BeginLoadResource();
-#if 0
-            loadCountLow  = 0;
-            loadCountHigh = 0;
-#endif
             loadHead   = NULL;
             loadNumber = 0;
         }
