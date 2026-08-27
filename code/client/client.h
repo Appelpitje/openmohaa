@@ -695,8 +695,8 @@ void Con_Bottom( void );
 void	SCR_Init (void);
 void	SCR_DrawDebugGraph(void);
 void	SCR_DrawScreenField(void);
-void	SCR_DrawDownload(void);
 void	SCR_UpdateScreen (void);
+void	CL_ClearDownloadDisplayState( void );
 
 void	SCR_DebugGraph (float value);
 

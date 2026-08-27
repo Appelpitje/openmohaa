@@ -1293,6 +1293,8 @@ void CL_Disconnect_f( void ) {
 	} else {
 		UI_CloseConsole();
 	}
+}
+
 /*
 ================
 CL_FastDlCommand_f
@@ -1842,13 +1844,34 @@ void CL_Clientinfo_f( void ) {
 //====================================================================
 
 /*
-=================
+================
+CL_ClearDownloadDisplayState
+
+Clears leftover download progress state so the UI stops
+drawing a completed or stalled download bar. Mirrors the
+cleanup done by CL_Disconnect and the UDP download path.
+================
+*/
+void CL_ClearDownloadDisplayState( void ) {
+	*clc.downloadTempName = *clc.downloadName = 0;
+	Cvar_Set( "cl_downloadName", "" );
+	clc.downloadCount = 0;
+	clc.downloadSize = 0;
+	Cvar_Set( "cl_downloadSize", "0" );
+	Cvar_Set( "cl_downloadCount", "0" );
+	Cvar_SetValue( "loadingbar", 0.0f );
+	UI_DownloadEnd();
+}
+
+/*
+================
 CL_DownloadsComplete
 
 Called when all downloading has been completed
-=================
+================
 */
 void CL_DownloadsComplete( void ) {
+	CL_ClearDownloadDisplayState();
 
 #ifdef USE_CURL
 	// if we downloaded with cURL
@@ -3671,7 +3694,7 @@ void CL_Init( void ) {
 
 	cl_allowDownload = Cvar_Get ("cl_allowDownload", "1", CVAR_ARCHIVE);
 	cl_fastdl = Cvar_Get ("cl_fastdl", "1", CVAR_ARCHIVE);
-	cl_fastdl_url = Cvar_Get ("cl_fastdl_url", "https://api.powellslocker.com/api/v1/fastdl", CVAR_ARCHIVE);
+	cl_fastdl_url = Cvar_Get ("cl_fastdl_url", "https://api.moh-db.com/api/v1/fastdl", CVAR_ARCHIVE);
 #ifdef USE_CURL
 	cl_cURLLib = Cvar_Get("cl_cURLLib", DEFAULT_CURL_LIB, CVAR_ARCHIVE);
 #endif

@@ -31,7 +31,11 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "cl_ui.h"
 #include "cl_uigamespy.h"
 
+#include "../uilib/uilabel.h"
+
 #include <chrono>
+
+static UILabel *s_downloadLabel = NULL;
 
 typedef struct {
     float             fadetime;
@@ -5843,8 +5847,54 @@ bool UI_ArchiveLoadMapinfo(const char *mapname)
 UI_BeginLoad
 ====================
 */
+void UI_DownloadBegin( void )
+{
+    if ( !ui_pLoadingMenu ) {
+        return;
+    }
+
+    ui_pLoadingMenu->PassEventToWidget( "loadingbar", new Event( EV_Widget_Enable ) );
+
+    Cvar_SetValue( "loadingbar", 0.0f );
+    Cvar_Set( "ui_fastdl_text", "" );
+
+    if ( !s_downloadLabel ) {
+        s_downloadLabel = new UILabel();
+        s_downloadLabel->setName( "fastdl_label" );
+        s_downloadLabel->setFont( "facfont-20" );
+        s_downloadLabel->setBackgroundColor( UColor( 0, 0, 0, 0 ), false );
+        s_downloadLabel->setShow( false );
+        ui_pLoadingMenu->AddMenuItem( s_downloadLabel );
+    }
+
+    UIWidget *container = ui_pLoadingMenu->GetContainerWidget();
+    if ( container ) {
+        s_downloadLabel->InitFrame( container, 160, 452, 320, 20, 0 );
+    }
+    s_downloadLabel->setForegroundColor( UColor( 1, 1, 1, 1 ) );
+    s_downloadLabel->setTitle( "" );
+    s_downloadLabel->setFontHorizontalAlignment( FONT_JUSTHORZ_CENTER );
+    s_downloadLabel->setFontVerticalAlignment( FONT_JUSTVERT_CENTER );
+    s_downloadLabel->LinkCvar( "ui_fastdl_text" );
+    s_downloadLabel->setShow( true );
+}
+
+void UI_DownloadEnd( void )
+{
+    if ( !s_downloadLabel ) {
+        return;
+    }
+
+    s_downloadLabel->setShow( false );
+    s_downloadLabel->setTitle( "" );
+}
+
 void UI_BeginLoad(const char *pszMapName)
 {
+    if ( s_downloadLabel ) {
+        s_downloadLabel->setShow( false );
+    }
+
     str mapfile;
 
     if (cls.loading != LOAD_PROGRESS_FALSE) {

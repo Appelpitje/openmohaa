@@ -117,6 +117,14 @@ void UI_DeleteScoreBoardItems(int iMaxIndex);
 void     UI_BeginLoad(const char *pszMapName);
 void     UI_EndLoad(void);
 void     UI_AbortLoad(void);
+#ifdef __cplusplus
+extern "C" {
+#endif
+void     UI_DownloadBegin(void);
+void     UI_DownloadEnd(void);
+#ifdef __cplusplus
+}
+#endif
 int      CL_FontStringWidth(fontheader_t *pFont, const char *pszString, int iMaxLen);
 void     UI_BeginLoadResource(void);
 void     UI_EndLoadResource(void);

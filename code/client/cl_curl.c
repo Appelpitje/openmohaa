@@ -24,6 +24,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "client.h"
 #include "../qcommon/unzip.h"
 
+void UI_DownloadBegin( void );
+void UI_DownloadEnd( void );
+
 #ifdef USE_CURL_DLOPEN
 #include "../sys/sys_loadlib.h"
 
@@ -205,6 +208,37 @@ void CL_cURL_Cleanup(void)
 	}
 }
 
+static void CL_DownloadUpdateUIProgress( void )
+{
+	float frac;
+	float speedKB;
+	int   dlTime;
+
+	if ( clc.downloadSize <= 0 ) {
+		return;
+	}
+
+	frac = ( float )clc.downloadCount / ( float )clc.downloadSize;
+	Cvar_SetValue( "loadingbar", frac );
+
+	dlTime = cls.realtime - ( int )Cvar_VariableValue( "cl_downloadTime" );
+	if ( dlTime < 0 ) {
+		dlTime = 0;
+	}
+	speedKB = 0.0f;
+	if ( dlTime > 0 && clc.downloadCount > 0 ) {
+		speedKB = ( ( float )clc.downloadCount / 1024.0f ) / ( ( float )dlTime / 1000.0f );
+	}
+
+	if ( speedKB >= 1024.0f ) {
+		Cvar_Set( "ui_fastdl_text", va( "Download map: %d%% (%.2f MB/s)",
+			( int )( frac * 100.0f + 0.5f ), speedKB / 1024.0f ) );
+	} else {
+		Cvar_Set( "ui_fastdl_text", va( "Download map: %d%% (%.0f KB/s)",
+			( int )( frac * 100.0f + 0.5f ), speedKB ) );
+	}
+}
+
 static int CL_cURL_CallbackProgress( void *dummy, double dltotal, double dlnow,
 	double ultotal, double ulnow )
 {
@@ -216,10 +250,7 @@ static int CL_cURL_CallbackProgress( void *dummy, double dltotal, double dlnow,
 		clc.downloadCount = (size_t)dlnow;
 		Cvar_SetValue( "cl_downloadCount", (int)clc.downloadCount );
 	}
-	if ( clc.downloadSize > 0 ) {
-		float frac = (float)clc.downloadCount / (float)clc.downloadSize;
-		Cvar_SetValue( "loadingbar", frac );
-	}
+	CL_DownloadUpdateUIProgress();
 	return 0;
 }
 
@@ -230,10 +261,7 @@ static size_t CL_cURL_CallbackWrite(void *buffer, size_t size, size_t nmemb,
 	size_t written = FS_Write( buffer, bytes, ((fileHandle_t*)stream)[0] );
 	clc.downloadCount += bytes;
 	Cvar_SetValue( "cl_downloadCount", (int)clc.downloadCount );
-	if ( clc.downloadSize > 0 ) {
-		float frac = (float)clc.downloadCount / (float)clc.downloadSize;
-		Cvar_SetValue( "loadingbar", frac );
-	}
+	CL_DownloadUpdateUIProgress();
 	return written;
 }
 
@@ -385,6 +413,9 @@ void CL_cURL_BeginDownload( const char *localName, const char *remoteURL, dlSour
 	Cvar_Set( "cl_downloadCount", "0" );
 	Cvar_SetValue( "cl_downloadTime", cls.realtime );
 
+	// Show the native MOHAA loading screen during the download
+	UI_DownloadBegin();
+
 	clc.downloadBlock = 0; // Starting new file
 	clc.downloadCount = 0;
 
@@ -453,7 +484,7 @@ void CL_FastDL_BeginDownload( const char *localName, const char *remoteName )
 	const char *fastDlBase = cl_fastdl_url ? cl_fastdl_url->string : NULL;
 
 	if( !fastDlBase || !*fastDlBase ) {
-		fastDlBase = "https://api.powellslocker.com/api/v1/fastdl";
+		fastDlBase = "https://api.moh-db.com/api/v1/fastdl";
 	}
 
 	while ( *fastDlBase == ' ' || *fastDlBase == '\"' || *fastDlBase == '\'' ) {
@@ -466,7 +497,7 @@ void CL_FastDL_BeginDownload( const char *localName, const char *remoteName )
 	}
 
 	if ( len == 0 || Q_stricmpn( fastDlClean, "http", 4 ) || !strstr( fastDlClean, "://" ) || strlen( strstr( fastDlClean, "://" ) + 3 ) < 1 ) {
-		Q_strncpyz( fastDlClean, "https://api.powellslocker.com/api/v1/fastdl", sizeof( fastDlClean ) );
+		Q_strncpyz( fastDlClean, "https://api.moh-db.com/api/v1/fastdl", sizeof( fastDlClean ) );
 		len = strlen( fastDlClean );
 	}
 
@@ -516,6 +547,8 @@ void CL_cURL_PerformDownload(void)
 			CL_cURL_Cleanup();
 			FS_Restart( clc.checksumFeed );
 			Com_Printf( "\n^2Fast-DL: Package '%s' downloaded and indexed successfully!^7\n", clc.downloadName );
+			CL_ClearDownloadDisplayState();
+			UI_DownloadEnd();
 		} else {
 			CL_NextDownload();
 		}
@@ -537,20 +570,21 @@ void CL_cURL_PerformDownload(void)
 		}
 
 		// Fallback 2: If MOH-DB Fast-DL failed, fallback to UDP ONLY IF explicitly allowed
-		if( clc.downloadSource == DL_SOURCE_FASTDL && ( cl_allowDownload->integer & DLF_ENABLE ) && !( cl_allowDownload->integer & DLF_NO_UDP ) && cl_fastdl->integer < 2 ) {
-			Com_Printf( "Fast-DL package '%s' not found on MOH-DB (HTTP %ld). Falling back to UDP download...\n",
-				clc.downloadRemoteName, code );
-			FS_Remove_HomeData( clc.downloadTempName );
-			CL_cURL_Cleanup();
-			clc.downloadSource = DL_SOURCE_UDP;
-			CL_BeginDownload( clc.downloadName, clc.downloadRemoteName );
-			return;
-		}
-
-		// If all sources failed or UDP is disabled
+if( clc.downloadSource == DL_SOURCE_FASTDL && ( cl_allowDownload->integer & DLF_ENABLE ) && !( cl_allowDownload->integer & DLF_NO_UDP ) && cl_fastdl->integer < 2 ) {
+		Com_Printf( "Fast-DL package '%s' not found on MOH-DB (HTTP %ld). Falling back to UDP download...\n",
+			clc.downloadRemoteName, code );
 		FS_Remove_HomeData( clc.downloadTempName );
-		Com_Error( ERR_DROP, "Download Error: '%s' could not be downloaded (HTTP %ld: %s).\nYou can download it manually from https://moh-db.com",
-			clc.downloadRemoteName, code, qcurl_easy_strerror( msg->data.result ) );
+		CL_cURL_Cleanup();
+		clc.downloadSource = DL_SOURCE_UDP;
+		CL_BeginDownload( clc.downloadName, clc.downloadRemoteName );
+		return;
+	}
+
+	// If all sources failed or UDP is disabled
+	FS_Remove_HomeData( clc.downloadTempName );
+	UI_DownloadEnd();
+	Com_Error( ERR_DROP, "Download Error: '%s' could not be downloaded (HTTP %ld: %s).\nYou can download it manually from https://moh-db.com",
+		clc.downloadRemoteName, code, qcurl_easy_strerror( msg->data.result ) );
 	}
 }
 #endif /* USE_CURL */

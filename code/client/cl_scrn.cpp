@@ -348,77 +348,7 @@ void SCR_DrawDemoRecording( void ) {
 	SCR_DrawStringExt( 320 - strlen( string ) * 4, 20, 8, string, g_color_table[7], qtrue, qfalse );
 }
 
-/*
-=================
-SCR_DrawDownload
 
-Draws the standard bottom progress bar on the multiplayer loading screen
-=================
-*/
-void SCR_DrawDownload( void ) {
-	char str[256];
-	vec4_t trackColor   = { 0.05f, 0.05f, 0.08f, 0.75f };
-	vec4_t borderColor = { 0.35f, 0.40f, 0.45f, 0.90f };
-	vec4_t barColor     = { 0.20f, 0.75f, 0.30f, 1.0f };
-	vec4_t textColor    = { 1.0f, 1.0f, 1.0f, 1.0f };
-
-	if ( !clc.downloadName[0] ) {
-		return;
-	}
-
-	// Progress calculation
-	float frac = 0.0f;
-	if ( clc.downloadSize > 0 ) {
-		frac = (float)clc.downloadCount / (float)clc.downloadSize;
-		if ( frac < 0.0f ) frac = 0.0f;
-		if ( frac > 1.0f ) frac = 1.0f;
-	}
-
-	// Position bar at the bottom of the screen (640x480 virtual resolution)
-	float barX = 60.0f;
-	float barY = 444.0f;
-	float barW = 520.0f;
-	float barH = 14.0f;
-
-	// Progress Bar Track
-	SCR_FillRect( barX, barY, barW, barH, trackColor );
-
-	// Progress Bar Fill
-	if ( frac > 0.0f ) {
-		SCR_FillRect( barX, barY, barW * frac, barH, barColor );
-	}
-
-	// Thin Border
-	SCR_FillRect( barX, barY, barW, 1.0f, borderColor );
-	SCR_FillRect( barX, barY + barH - 1.0f, barW, 1.0f, borderColor );
-	SCR_FillRect( barX, barY, 1.0f, barH, borderColor );
-	SCR_FillRect( barX + barW - 1.0f, barY, 1.0f, barH, borderColor );
-
-	// Stats (MB / Total MB, Speed)
-	int dlTime = cls.realtime - (int)Cvar_VariableValue( "cl_downloadTime" );
-	float speedKB = 0.0f;
-	if ( dlTime > 0 && clc.downloadCount > 0 ) {
-		speedKB = ( (float)clc.downloadCount / 1024.0f ) / ( (float)dlTime / 1000.0f );
-	}
-
-	if ( clc.downloadSize > 0 ) {
-		float curMB = (float)clc.downloadCount / ( 1024.0f * 1024.0f );
-		float totMB = (float)clc.downloadSize / ( 1024.0f * 1024.0f );
-		if ( speedKB >= 1024.0f ) {
-			Com_sprintf( str, sizeof( str ), "Downloading %s... (%.0f%%)  %.2f MB / %.2f MB  (^2%.2f MB/s^7)",
-				clc.downloadName, frac * 100.0f, curMB, totMB, speedKB / 1024.0f );
-		} else {
-			Com_sprintf( str, sizeof( str ), "Downloading %s... (%.0f%%)  %.2f MB / %.2f MB  (^2%.1f KB/s^7)",
-				clc.downloadName, frac * 100.0f, curMB, totMB, speedKB );
-		}
-	} else {
-		float curMB = (float)clc.downloadCount / ( 1024.0f * 1024.0f );
-		Com_sprintf( str, sizeof( str ), "Downloading %s... %.2f MB", clc.downloadName, curMB );
-	}
-
-	// Status text right above the bar
-	SCR_DrawStringExt( (int)barX, (int)(barY - 14.0f), 8.0f, str, textColor, qfalse, qfalse );
-}
 
 
 /*
@@ -544,10 +474,6 @@ void SCR_DrawScreenField( void ) {
 	default:
 		break;
 	}
-
-	if ( clc.downloadName[0] ) {
-		SCR_DrawDownload();
-	}
 }
 
 /*
@@ -562,9 +488,6 @@ void UpdateStereoSide( stereoFrame_t s ) {
 		SCR_DrawCinematic();
 	}
 	UI_Update();
-	if( clc.downloadName[0] ) {
-		SCR_DrawDownload();
-	}
 }
 
 /*
